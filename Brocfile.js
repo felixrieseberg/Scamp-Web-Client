@@ -1,8 +1,13 @@
 /* global require, module */
 
-var EmberApp = require('ember-cli/lib/broccoli/ember-app');
+var EmberApp = require('ember-cli/lib/broccoli/ember-app'),
+    HtmlbarsCompiler = require('ember-cli-htmlbars'),
+    app = new EmberApp();
 
-var app = new EmberApp();
+var templateTree = new HtmlbarsCompiler('app/templates', {
+    isHTMLBars: true,
+    templateCompiler: require('./bower_components/ember/ember-template-compiler')
+});
 
 // Use `app.import` to add additional libraries to the generated
 // output files.
@@ -16,5 +21,31 @@ var app = new EmberApp();
 // modules that you would like to import into your application
 // please specify an object with the list of modules as keys
 // along with the exports of each module as its value.
+
+app.import('bower_components/bootstrap/dist/js/bootstrap.js');
+app.import('bower_components/bootstrap/dist/css/bootstrap.css');
+app.import('bower_components/bootstrap/dist/fonts/glyphicons-halflings-regular.woff', { destDir: 'fonts' });
+app.import('bower_components/bootstrap/dist/fonts/glyphicons-halflings-regular.ttf', { destDir: 'fonts' });
+
+app.import('bower_components/selectize/dist/js/standalone/selectize.js');
+app.import('bower_components/selectize/dist/css/selectize.css');
+
+app.import('bower_components/rdash-ui/dist/css/rdash.min.css');
+app.import('bower_components/rdash-ui/dist/fonts/montserrat-regular-webfont.woff', { destDir: 'fonts' });
+app.import('bower_components/rdash-ui/dist/fonts/montserrat-regular-webfont.ttf', { destDir: 'fonts' });
+
+app.import('bower_components/moment/min/moment-with-locales.js');
+app.import('bower_components/rangeslider.js/dist/rangeslider.min.js');
+app.import('bower_components/bootstrap-switch/dist/js/bootstrap-switch.min.js');
+app.import('bower_components/bootstrap-select/dist/css/bootstrap-select.min.css');
+app.import('bower_components/bootstrap-select/dist/js/bootstrap-select.js');
+app.import('bower_components/JavaScript-MD5/js/md5.js');
+app.import('bower_components/jquery-touchswipe/jquery.touchSwipe.min.js');
+
+app.import('bower_components/underscore/underscore-min.js', {
+  'underscore': [
+    'default'
+  ]
+});
 
 module.exports = app.toTree();

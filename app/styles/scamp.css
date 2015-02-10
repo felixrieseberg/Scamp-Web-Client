@@ -1,0 +1,16 @@
+[data-ember-action] {
+    cursor: pointer;
+}
+
+ul.breadcrumbs {
+    list-style: none outside none;
+    padding-left: 0;
+}
+
+.breadcrumbs li:after {
+    content: "/";
+}
+
+.breadcrumbs li:last-child:after {
+    content: "";
+}

@@ -1,0 +1,40 @@
+<div id="sidebar-wrapper">
+    <ul class="sidebar">
+        <li class="sidebar-main">
+            <a {{action "toggleSidebar" target=view}}>
+                Scamp
+                <span class="menu-icon glyphicon glyphicon-transfer"></span>
+            </a>
+        </li>
+        <li class="sidebar-title"><span>NAVIGATION</span></li>
+        <li class="sidebar-list">
+            {{#link-to "dashboard"}}Dashboard <span class="menu-icon fa fa-tachometer"></span>{{/link-to}}
+        </li>
+        <li class="sidebar-list">
+            {{#link-to "resources"}}Resources <span class="menu-icon fa fa-cloud"></span>{{/link-to}}
+        </li>
+        <li class="sidebar-list">
+            {{#link-to "logs"}}Logs <span class="menu-icon fa fa-list"></span>{{/link-to}}
+        </li>
+        <li class="sidebar-list">
+            {{#link-to "settings"}}Settings <span class="menu-icon fa fa-cog"></span>{{/link-to}}
+        </li>
+    </ul>
+    <div class="sidebar-footer">
+        <div class="col-xs-4">
+            <a href="https://github.com/felixrieseberg/ScampFrontend" target="_blank">
+                Github
+            </a>
+        </div>
+        <div class="col-xs-4">
+            <a href="http://www.felixrieseberg.com" target="_blank">
+                About
+            </a>
+        </div>
+        <div class="col-xs-4">
+            <a href="#">
+                Support
+            </a>
+        </div>
+    </div>
+</div>
