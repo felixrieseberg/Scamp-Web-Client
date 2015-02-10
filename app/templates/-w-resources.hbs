@@ -1,0 +1,51 @@
+<div class="widget">
+    <div class="widget-header">
+        <i class="fa fa-tasks"></i> Resources <span class="pull-right">Manage</span>
+    </div>
+    <div class="widget-body no-padding">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th class="text-center">ID</th>
+                        <th>Action</th>
+                        <th>Name</th>
+                        <th>State</th>
+                        <th>Group</th>
+                        <th>Usage</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{#each resource in resources itemController="resource"}}
+                        <tr>
+                            <td class="text-center">{{resource.id}}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <a class="btn btn-small dropdown-toggle" data-toggle="dropdown" ref="#">
+                                        Action
+                                        <span class="caret"></span>
+                                    </a>
+                                    <ul class="dropdown-menu">
+                                        <li><a href="#">Start</a></li>
+                                        <li><a href="#">Stop</a></li>
+                                        <li><a href="#">Delete</a></li>
+                                    </ul>
+                                </div>
+                            </td>
+                            <td>{{resource.name}}</td>
+                            <td>{{resource.state}}</td>
+                            <td>{{resource.group.name}}</td>
+                            <td class="resource">
+                                <div class="progress">
+                                    <div class="progress-bar" role="progressbar" {{bind-attr aria-valuenow=resource.remaining style=resource.remainingBarStyle}}
+                                  aria-valuemin="0" aria-valuemax="1">
+                                  </div>
+                                </div>
+                            </td>
+                        </tr>
+                    {{/each}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
