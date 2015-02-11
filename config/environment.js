@@ -1,6 +1,6 @@
 /* jshint node: true */
 
-module.exports = function(environment) {
+module.exports = function (environment) {
   var ENV = {
     modulePrefix: 'scamp',
     environment: environment,
@@ -25,6 +25,16 @@ module.exports = function(environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
+     
+    ENV.contentSecurityPolicy = {
+      'default-src': "'none'",
+      'script-src': "'self'",
+      'font-src': "'self'",
+      'connect-src': "'self'",
+      'img-src': "'self' http://placekitten.com",
+      'style-src': "'self' 'unsafe-inline'",
+      'media-src': "'self'"
+    }
   }
 
   if (environment === 'test') {
@@ -42,6 +52,8 @@ module.exports = function(environment) {
   if (environment === 'production') {
 
   }
+
+
 
   return ENV;
 };
