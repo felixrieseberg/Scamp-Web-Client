@@ -64,65 +64,65 @@ if [[ ! -n "$KUDU_SYNC_CMD" ]]; then
   fi
 fi
 
-# Node Helpers
-# ------------
+# # Node Helpers
+# # ------------
  
-selectNodeVersion () {
-  if [[ -n "$KUDU_SELECT_NODE_VERSION_CMD" ]]; then
-    SELECT_NODE_VERSION="$KUDU_SELECT_NODE_VERSION_CMD \"$DEPLOYMENT_SOURCE\" \"$DEPLOYMENT_TARGET\" \"$DEPLOYMENT_TEMP\""
-    eval $SELECT_NODE_VERSION
-    exitWithMessageOnError "select node version failed"
+# selectNodeVersion () {
+#   if [[ -n "$KUDU_SELECT_NODE_VERSION_CMD" ]]; then
+#     SELECT_NODE_VERSION="$KUDU_SELECT_NODE_VERSION_CMD \"$DEPLOYMENT_SOURCE\" \"$DEPLOYMENT_TARGET\" \"$DEPLOYMENT_TEMP\""
+#     eval $SELECT_NODE_VERSION
+#     exitWithMessageOnError "select node version failed"
  
-    if [[ -e "$DEPLOYMENT_TEMP/__nodeVersion.tmp" ]]; then
-      NODE_EXE=`cat "$DEPLOYMENT_TEMP/__nodeVersion.tmp"`
-      exitWithMessageOnError "getting node version failed"
-    fi
+#     if [[ -e "$DEPLOYMENT_TEMP/__nodeVersion.tmp" ]]; then
+#       NODE_EXE=`cat "$DEPLOYMENT_TEMP/__nodeVersion.tmp"`
+#       exitWithMessageOnError "getting node version failed"
+#     fi
     
-    if [[ -e "$DEPLOYMENT_TEMP/.tmp" ]]; then
-      NPM_JS_PATH=`cat "$DEPLOYMENT_TEMP/__npmVersion.tmp"`
-      exitWithMessageOnError "getting npm version failed"
-    fi
+#     if [[ -e "$DEPLOYMENT_TEMP/.tmp" ]]; then
+#       NPM_JS_PATH=`cat "$DEPLOYMENT_TEMP/__npmVersion.tmp"`
+#       exitWithMessageOnError "getting npm version failed"
+#     fi
  
-    if [[ ! -n "$NODE_EXE" ]]; then
-      NODE_EXE=node
-    fi
+#     if [[ ! -n "$NODE_EXE" ]]; then
+#       NODE_EXE=node
+#     fi
  
-    NPM_CMD="\"$NODE_EXE\" \"$NPM_JS_PATH\""
-  else
-    NPM_CMD=npm
-    NODE_EXE=node
-  fi
-}
+#     NPM_CMD="\"$NODE_EXE\" \"$NPM_JS_PATH\""
+#   else
+#     NPM_CMD=npm
+#     NODE_EXE=node
+#   fi
+# }
 
-##################################################################################################################################
-# Building Ember-Cli App
-# ----------
+# ##################################################################################################################################
+# # Building Ember-Cli App
+# # ----------
 
-# 1. Select node version
-selectNodeVersion
+# # 1. Select node version
+# selectNodeVersion
  
-# 2. Install npm packages
-if [ -e "$DEPLOYMENT_SOURCE/package.json" ]; then
-  eval $NPM_CMD config set registry="http://registry.npmjs.org/"
-  eval $NPM_CMD install --dev
-  exitWithMessageOnError "npm failed"
-fi
+# # 2. Install npm packages
+# if [ -e "$DEPLOYMENT_SOURCE/package.json" ]; then
+#   eval $NPM_CMD config set registry="http://registry.npmjs.org/"
+#   eval $NPM_CMD install --dev
+#   exitWithMessageOnError "npm failed"
+# fi
  
-# 3. Install bower packages
-if [ -e "$DEPLOYMENT_SOURCE/bower.json" ]; then
-  eval $NPM_CMD install bower
-  exitWithMessageOnError "installing bower failed"
-  ./node_modules/.bin/bower install
-  exitWithMessageOnError "bower failed"
-fi
+# # 3. Install bower packages
+# if [ -e "$DEPLOYMENT_SOURCE/bower.json" ]; then
+#   eval $NPM_CMD install bower
+#   exitWithMessageOnError "installing bower failed"
+#   ./node_modules/.bin/bower install
+#   exitWithMessageOnError "bower failed"
+# fi
  
-# 4. Install and build ember-cli
-if [ -e "$DEPLOYMENT_SOURCE/Gruntfile.js" ]; then
-  eval $NPM_CMD install ember-cli
-  exitWithMessageOnError "installing ember-cli failed"
-  ./node_modules/.bin/ember build
-  exitWithMessageOnError "Ember build failed"
-fi
+# # 4. Install and build ember-cli
+# if [ -e "$DEPLOYMENT_SOURCE/Gruntfile.js" ]; then
+#   eval $NPM_CMD install ember-cli
+#   exitWithMessageOnError "installing ember-cli failed"
+#   ./node_modules/.bin/ember build
+#   exitWithMessageOnError "Ember build failed"
+# fi
 
 ##################################################################################################################################
 # Deployment
