@@ -46,5 +46,8 @@
     "grunt-cordovacli": "^0.5.1",
     "grunt-jscs": "^0.8.1",
     "load-grunt-tasks": "^1.0.0"
+  },
+  "dependencies": {
+    "ember-cli-chartist": "^0.2.5"
   }
 }

@@ -16,7 +16,7 @@
         <div class="widget">
             <div class="widget-body">
                 <div class="widget-content">
-                    <div class="widget-icon orange pull-left"> <i class="fa fa-cloud"></i>
+                    <div class="widget-icon orange pull-left"> <i class="fa fa-rocket"></i>
                     </div>
                     <div class="title">{{averageUtilization}}%</div>
                     <div class="comment">Average Utilization</div>
@@ -47,6 +47,19 @@
                     <div class="title">80</div>
                     <div class="comment">Users</div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-12">
+        <div class="widget">
+            <div class="widget-header">
+                <i class="fa fa-rocket"></i> Utilization
+            </div>
+            <div class="widget-body">
+                {{chartist-chart options=chartOptions ratio="ct-double-octave" data=chartData}}
             </div>
         </div>
     </div>
