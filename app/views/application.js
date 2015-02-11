@@ -3,6 +3,8 @@ import Ember from 'ember';
 export default Ember.View.extend({
 
     sidebarOpen: true,
+    userDropdownOpen: false,
+    notificationsDropdownOpen: false,
 
     init: function () {
         this._super();
@@ -18,6 +20,14 @@ export default Ember.View.extend({
     actions: {
         toggleSidebar: function () {
             this.toggleProperty('sidebarOpen');
+        },
+
+        toggleUserDropdown: function () {
+            this.toggleProperty('userDropdownOpen');
+        },
+
+        toggleNotificationsDropdown: function () {
+            this.toggleProperty('notificationsDropdownOpen');
         }
     }
 

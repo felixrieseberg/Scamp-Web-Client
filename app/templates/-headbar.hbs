@@ -2,12 +2,12 @@
     <div class="col-xs-12">
         <div class="user pull-right">
             <div class="item dropdown">
-                <a href="#" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">
+                <a {{action "toggleUserDropdown" target=view}} class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">
                     <img src="http://placekitten.com/g/40/40">
                 </a>
-                <ul class="dropdown-menu dropdown-menu-right">
+                <ul {{bind-attr class="view.userDropdownOpen:visible :dropdown-menu :dropdown-menu-right"}}>
                     <li class="dropdown-header">
-                        Joe Bloggs
+                        Felix Rieseberg
                     </li>
                     <li class="divider"></li>
                     <li class="link">
@@ -34,10 +34,10 @@
                 </ul>
             </div>
             <div class="item dropdown">
-                <a href="#" class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">
+                <a {{action "toggleNotificationsDropdown" target=view}} class="dropdown-toggle" aria-haspopup="true" aria-expanded="false">
                     <i class="fa fa-bell-o"></i>
                 </a>
-                <ul class="dropdown-menu dropdown-menu-right">
+                <ul {{bind-attr class="view.notificationsDropdownOpen:visible :dropdown-menu :dropdown-menu-right"}}>
                     <li class="dropdown-header">
                         Notifications
                     </li>

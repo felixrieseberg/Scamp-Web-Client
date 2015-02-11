@@ -46,3 +46,9 @@ table .progress {
 .page::first-letter {
     text-transform: uppercase;
 }
+
+.visible {
+    visibility: visible;
+    opacity: 1;
+    display: block;
+}

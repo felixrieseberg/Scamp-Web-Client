@@ -558,7 +558,6 @@ define('scamp/templates/-headbar', ['exports'], function (exports) {
         var el4 = dom.createTextNode("\n                ");
         dom.appendChild(el3, el4);
         var el4 = dom.createElement("a");
-        dom.setAttribute(el4,"href","#");
         dom.setAttribute(el4,"class","dropdown-toggle");
         dom.setAttribute(el4,"aria-haspopup","true");
         dom.setAttribute(el4,"aria-expanded","false");
@@ -573,12 +572,11 @@ define('scamp/templates/-headbar', ['exports'], function (exports) {
         var el4 = dom.createTextNode("\n                ");
         dom.appendChild(el3, el4);
         var el4 = dom.createElement("ul");
-        dom.setAttribute(el4,"class","dropdown-menu dropdown-menu-right");
         var el5 = dom.createTextNode("\n                    ");
         dom.appendChild(el4, el5);
         var el5 = dom.createElement("li");
         dom.setAttribute(el5,"class","dropdown-header");
-        var el6 = dom.createTextNode("\n                        Joe Bloggs\n                    ");
+        var el6 = dom.createTextNode("\n                        Felix Rieseberg\n                    ");
         dom.appendChild(el5, el6);
         dom.appendChild(el4, el5);
         var el5 = dom.createTextNode("\n                    ");
@@ -660,7 +658,6 @@ define('scamp/templates/-headbar', ['exports'], function (exports) {
         var el4 = dom.createTextNode("\n                ");
         dom.appendChild(el3, el4);
         var el4 = dom.createElement("a");
-        dom.setAttribute(el4,"href","#");
         dom.setAttribute(el4,"class","dropdown-toggle");
         dom.setAttribute(el4,"aria-haspopup","true");
         dom.setAttribute(el4,"aria-expanded","false");
@@ -675,7 +672,6 @@ define('scamp/templates/-headbar', ['exports'], function (exports) {
         var el4 = dom.createTextNode("\n                ");
         dom.appendChild(el3, el4);
         var el4 = dom.createElement("ul");
-        dom.setAttribute(el4,"class","dropdown-menu dropdown-menu-right");
         var el5 = dom.createTextNode("\n                    ");
         dom.appendChild(el4, el5);
         var el5 = dom.createElement("li");
@@ -744,7 +740,7 @@ define('scamp/templates/-headbar', ['exports'], function (exports) {
       },
       render: function render(context, env, contextualElement) {
         var dom = env.dom;
-        var hooks = env.hooks, content = hooks.content;
+        var hooks = env.hooks, get = hooks.get, element = hooks.element, content = hooks.content;
         dom.detectNamespace(contextualElement);
         var fragment;
         if (env.useFragmentCache && dom.canClone) {
@@ -762,9 +758,21 @@ define('scamp/templates/-headbar', ['exports'], function (exports) {
         } else {
           fragment = this.build(dom);
         }
-        var element0 = dom.childAt(fragment, [1, 3]);
-        var morph0 = dom.createMorphAt(dom.childAt(element0, [1]),0,1);
-        var morph1 = dom.createMorphAt(dom.childAt(element0, [3]),0,1);
+        var element0 = dom.childAt(fragment, [1]);
+        var element1 = dom.childAt(element0, [1]);
+        var element2 = dom.childAt(element1, [1]);
+        var element3 = dom.childAt(element2, [1]);
+        var element4 = dom.childAt(element2, [3]);
+        var element5 = dom.childAt(element1, [3]);
+        var element6 = dom.childAt(element5, [1]);
+        var element7 = dom.childAt(element5, [3]);
+        var element8 = dom.childAt(element0, [3]);
+        var morph0 = dom.createMorphAt(dom.childAt(element8, [1]),0,1);
+        var morph1 = dom.createMorphAt(dom.childAt(element8, [3]),0,1);
+        element(env, element3, context, "action", ["toggleUserDropdown"], {"target": get(env, context, "view")});
+        element(env, element4, context, "bind-attr", [], {"class": "view.userDropdownOpen:visible :dropdown-menu :dropdown-menu-right"});
+        element(env, element6, context, "action", ["toggleNotificationsDropdown"], {"target": get(env, context, "view")});
+        element(env, element7, context, "bind-attr", [], {"class": "view.notificationsDropdownOpen:visible :dropdown-menu :dropdown-menu-right"});
         content(env, morph0, context, "currentRouteName");
         content(env, morph1, context, "bread-crumbs");
         return fragment;
@@ -3120,6 +3128,8 @@ define('scamp/views/application', ['exports', 'ember'], function (exports, Ember
     exports['default'] = Ember['default'].View.extend({
 
         sidebarOpen: true,
+        userDropdownOpen: false,
+        notificationsDropdownOpen: false,
 
         init: function () {
             this._super();
@@ -3135,6 +3145,14 @@ define('scamp/views/application', ['exports', 'ember'], function (exports, Ember
         actions: {
             toggleSidebar: function () {
                 this.toggleProperty("sidebarOpen");
+            },
+
+            toggleUserDropdown: function () {
+                this.toggleProperty("userDropdownOpen");
+            },
+
+            toggleNotificationsDropdown: function () {
+                this.toggleProperty("notificationsDropdownOpen");
             }
         }
 
@@ -3203,7 +3221,7 @@ catch(err) {
 if (runningTests) {
   require("scamp/tests/test-helper");
 } else {
-  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.759b99df"});
+  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.678d3ecb"});
 }
 
 /* jshint ignore:end */
