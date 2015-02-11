@@ -1,4 +1,4 @@
-define('scamp/adapters/application', ['exports', 'scamp/app', 'ember-data'], function (exports, App, DS) {
+define('scamp/adapters/application', ['exports', 'ember-data'], function (exports, DS) {
 
 	'use strict';
 
@@ -6,6 +6,9 @@ define('scamp/adapters/application', ['exports', 'scamp/app', 'ember-data'], fun
 
 	// LocalStorage Adapter
 	// -------------------------------------------------
+	// import App from '../app';
+	// import DS from 'ember-data';
+	//
 	// App.ApplicationSerializer = DS.LSSerializer.extend();
 	// export default DS.LSAdapter.extend({
 	//     namespace: 'Scamp'
@@ -15,6 +18,9 @@ define('scamp/adapters/application', ['exports', 'scamp/app', 'ember-data'], fun
 	//
 	// Rest Adapter, calling http://[HOST]/api/model/id
 	// -------------------------------------------------
+	// import App from '../app';
+	// import DS from 'ember-data';
+	//
 	// export default DS.RESTAdapter.extend({
 	//     namespace: 'api'
 	// });
@@ -2480,7 +2486,7 @@ define('scamp/tests/adapters/application.jshint', function () {
 
   module('JSHint - adapters');
   test('adapters/application.js should pass jshint', function() { 
-    ok(false, 'adapters/application.js should pass jshint.\nadapters/application.js: line 1, col 8, \'App\' is defined but never used.\n\n1 error'); 
+    ok(true, 'adapters/application.js should pass jshint.'); 
   });
 
 });
@@ -3117,7 +3123,7 @@ define('scamp/tests/views/dashboard.jshint', function () {
 
   module('JSHint - views');
   test('views/dashboard.js should pass jshint', function() { 
-    ok(false, 'views/dashboard.js should pass jshint.\nviews/dashboard.js: line 6, col 22, \'$\' is not defined.\nviews/dashboard.js: line 17, col 26, \'$\' is not defined.\nviews/dashboard.js: line 7, col 13, \'seq\' is defined but never used.\nviews/dashboard.js: line 8, col 13, \'delays\' is defined but never used.\nviews/dashboard.js: line 9, col 13, \'durations\' is defined but never used.\n\n5 errors'); 
+    ok(true, 'views/dashboard.js should pass jshint.'); 
   });
 
 });
@@ -3166,10 +3172,8 @@ define('scamp/views/dashboard', ['exports', 'ember'], function (exports, Ember) 
     exports['default'] = Ember['default'].View.extend({
 
         sugarChart: (function () {
-            var $chart = $(".ct-chart"),
-                seq = 0,
-                delays = 80,
-                durations = 500;
+            var $ = Ember['default'].$,
+                $chart = $(".ct-chart");
 
             var $toolTip = $chart.append("<div class=\"tooltip top\"><div class=\"tooltip-arrow\"></div><div class=\"tooltip-inner\"></div></div>").find(".tooltip").hide();
 
@@ -3221,7 +3225,7 @@ catch(err) {
 if (runningTests) {
   require("scamp/tests/test-helper");
 } else {
-  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.678d3ecb"});
+  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.bd1be2ba"});
 }
 
 /* jshint ignore:end */

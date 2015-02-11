@@ -1,10 +1,12 @@
-import App from '../app';
 import DS from 'ember-data';
 
 export default DS.FixtureAdapter;
 
 // LocalStorage Adapter
 // -------------------------------------------------
+// import App from '../app';
+// import DS from 'ember-data';
+// 
 // App.ApplicationSerializer = DS.LSSerializer.extend();
 // export default DS.LSAdapter.extend({
 //     namespace: 'Scamp'
@@ -14,6 +16,9 @@ export default DS.FixtureAdapter;
 // 
 // Rest Adapter, calling http://[HOST]/api/model/id
 // -------------------------------------------------
+// import App from '../app';
+// import DS from 'ember-data';
+// 
 // export default DS.RESTAdapter.extend({
 //     namespace: 'api'
 // });

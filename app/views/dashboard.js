@@ -3,10 +3,8 @@ import Ember from 'ember';
 export default Ember.View.extend({
 
     sugarChart: function () {
-        var $chart = $('.ct-chart'),
-            seq = 0,
-            delays = 80,
-            durations = 500;
+        var $ = Ember.$,
+            $chart = $('.ct-chart');
 
         var $toolTip = $chart
             .append('<div class="tooltip top"><div class="tooltip-arrow"></div><div class="tooltip-inner"></div></div>')
