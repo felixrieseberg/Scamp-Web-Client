@@ -1,7 +1,5 @@
-# Scamp
-
-This README outlines the details of collaborating on this Ember application.
-A short introduction of this app could easily go here.
+# Scamp Frontend
+This is the frontend client for a Scamp, a currently unfinished project around Azure Resource Management.
 
 ## Prerequisites
 
@@ -23,7 +21,7 @@ You will need the following things properly installed on your computer.
 ## Running / Development
 
 * `ember server`
-* Visit your app at [http://localhost:4200](http://localhost:4200).
+* Visit the Scamp Frontend at [http://localhost:4200](http://localhost:4200).
 
 ### Code Generators
 
