@@ -3,6 +3,8 @@
 window.EmberENV = {"FEATURES":{}};
 var runningTests = false;
 
+
+
 /* jshint ignore:end */
 
 ;var define, requireModule, require, requirejs;
@@ -65690,6 +65692,17 @@ define("ember/container-debug-adapter",
     },
 
     /**
+     * Get all defined modules.
+     *
+     * @method _getEntries
+     * @return {Array} the list of registered modules.
+     * @private
+     */
+    _getEntries: function() {
+      return requirejs.entries;
+    },
+
+    /**
       Returns the available classes a given type.
 
       @method catalogEntriesByType
@@ -65697,7 +65710,7 @@ define("ember/container-debug-adapter",
       @return {Array} An array of classes.
     */
     catalogEntriesByType: function(type) {
-      var entries = requirejs.entries,
+      var entries = this._getEntries(),
           module,
           types = Ember.A();
 
@@ -65705,24 +65718,39 @@ define("ember/container-debug-adapter",
         return this.shortname;
       };
 
+      var prefix = this.namespace.modulePrefix;
+
       for(var key in entries) {
-        if(entries.hasOwnProperty(key) && key.indexOf(type) !== -1)
-        {
-          // // TODO return the name instead of the module itself
-          // module = require(key, null, null, true);
+        if(entries.hasOwnProperty(key) && key.indexOf(type) !== -1) {
+          // Check if it's a pod module
+          var name = getPod(type, key, this.namespace.podModulePrefix || prefix);
+          if (!name) {
+            // Not pod
+            name = key.split(type + 's/').pop();
 
-          // if (module && module['default']) { module = module['default']; }
-          // module.shortname = key.split(type +'s/').pop();
-          // module.toString = makeToString;
+            // Support for different prefix (such as ember-cli addons).
+            // Uncomment the code below when
+            // https://github.com/ember-cli/ember-resolver/pull/80 is merged.
 
-          // types.push(module);
-          types.push(key.split(type +'s/').pop());
+            //var match = key.match('^/?(.+)/' + type);
+            //if (match && match[1] !== prefix) {
+              // Different prefix such as an addon
+              //name = match[1] + '@' + name;
+            //}
+          }
+          types.addObject(name);
         }
       }
-
       return types;
     }
   });
+
+  function getPod(type, key, prefix) {
+    var match = key.match(new RegExp('^/?' + prefix + '/(.+)/' + type + '$'));
+    if (match) {
+      return match[1];
+    }
+  }
 
   ContainerDebugAdapter['default'] = ContainerDebugAdapter;
   return ContainerDebugAdapter;
@@ -65739,11 +65767,12 @@ define("ember/container-debug-adapter",
   Ember.Application.initializer({
     name: 'container-debug-adapter',
 
-    initialize: function(container) {
+    initialize: function(container, app) {
       var ContainerDebugAdapter = require('ember/container-debug-adapter');
       var Resolver = require('ember/resolver');
 
       container.register('container-debug-adapter:main', ContainerDebugAdapter);
+      app.inject('container-debug-adapter:main', 'namespace', 'application:main');
     }
   });
 }());
@@ -69228,7 +69257,7 @@ define("ember/load-initializers",
     Ember = require('ember');
   }
 
-Ember.libraries.register('Ember Simple Auth', '0.6.7');
+Ember.libraries.register('Ember Simple Auth', '0.7.3');
 
 define("simple-auth/authenticators/base", 
   ["exports"],
@@ -69331,14 +69360,14 @@ define("simple-auth/authenticators/base",
         @return {Ember.RSVP.Promise} A promise that when it resolves results in the session being authenticated
       */
       restore: function(data) {
-        return new Ember.RSVP.reject();
+        return Ember.RSVP.reject();
       },
 
       /**
         Authenticates the session with the specified `options`. These options vary
         depending on the actual authentication mechanism the authenticator
         implements (e.g. a set of credentials or a Facebook account id etc.). __The
-        session will invoke this method when an action in the appliaction triggers
+        session will invoke this method when an action in the application triggers
         authentication__ (see
         [SimpleAuth.AuthenticationControllerMixin.actions#authenticate](#SimpleAuth-AuthenticationControllerMixin-authenticate)).
 
@@ -69351,11 +69380,11 @@ define("simple-auth/authenticators/base",
         rejecting promise and thus never authenticates the session.
 
         @method authenticate
-        @param {Object} options The options to authenticate the session with
+        @param {Any} [...options] The arguments that the authenticator requires to authenticate the session
         @return {Ember.RSVP.Promise} A promise that when it resolves results in the session being authenticated
       */
       authenticate: function(options) {
-        return new Ember.RSVP.reject();
+        return Ember.RSVP.reject();
       },
 
       /**
@@ -69377,7 +69406,7 @@ define("simple-auth/authenticators/base",
         @return {Ember.RSVP.Promise} A promise that when it resolves results in the session being invalidated
       */
       invalidate: function(data) {
-        return new Ember.RSVP.resolve();
+        return Ember.RSVP.resolve();
       }
     });
   });
@@ -69445,6 +69474,7 @@ define("simple-auth/configuration",
       authorizer:                  null,
       session:                     'simple-auth-session:main',
       store:                       'simple-auth-session-store:local-storage',
+      localStorageKey:             'ember_simple_auth:session',
       crossOriginWhitelist:        [],
       applicationRootUrl:          null
     };
@@ -69452,12 +69482,11 @@ define("simple-auth/configuration",
     /**
       Ember Simple Auth's configuration object.
 
-      To change any of these values, define a global environment object for Ember
-      Simple Auth and define the values there:
+      To change any of these values, set them on the application's environment
+      object:
 
       ```js
-      window.ENV = window.ENV || {};
-      window.ENV['simple-auth'] = {
+      ENV['simple-auth'] = {
         authenticationRoute: 'sign-in'
       };
       ```
@@ -69555,11 +69584,24 @@ define("simple-auth/configuration",
       store: defaults.store,
 
       /**
+        The key the store stores the data in.
+
+        @property key
+        @type String
+        @default 'ember_simple_auth:session'
+      */
+      localStorageKey: defaults.localStorageKey,
+
+      /**
         Ember Simple Auth will never authorize requests going to a different origin
         than the one the Ember.js application was loaded from; to explicitely
         enable authorization for additional origins, whitelist those origins with
         this setting. _Beware that origins consist of protocol, host and port (port
-        can be left out when it is 80 for HTTP or 443 for HTTPS)_
+        can be left out when it is 80 for HTTP or 443 for HTTPS)_, e.g.
+        `http://domain.com:1234`, `https://external.net`. You can also whitelist
+        all subdomains for a specific domain using wildcard expressions e.g.
+        `http://*.domain.com:1234`, `https://*.external.net` or whitelist all
+        external origins by specifying `[*]`.
 
         @property crossOriginWhitelist
         @readOnly
@@ -69616,6 +69658,8 @@ define("simple-auth/mixins/application-route-mixin",
   function(__dependency1__, __exports__) {
     "use strict";
     var Configuration = __dependency1__["default"];
+
+    var routeEntryComplete = false;
 
     /**
       The mixin for the application route; defines actions to authenticate the
@@ -69675,6 +69719,15 @@ define("simple-auth/mixins/application-route-mixin",
     */
     __exports__["default"] = Ember.Mixin.create({
       /**
+        @method activate
+        @private
+      */
+      activate: function () {
+        routeEntryComplete = true;
+        this._super();
+      },
+
+      /**
         @method beforeModel
         @private
       */
@@ -69692,7 +69745,8 @@ define("simple-auth/mixins/application-route-mixin",
           ]).forEach(function(event) {
             _this.get(Configuration.sessionPropertyName).on(event, function(error) {
               Array.prototype.unshift.call(arguments, event);
-              transition.send.apply(transition, arguments);
+              var target = routeEntryComplete ? _this : transition;
+              target.send.apply(target, arguments);
             });
           });
         }
@@ -69793,10 +69847,17 @@ define("simple-auth/mixins/application-route-mixin",
           the Ember.js application's router (see
           http://emberjs.com/guides/routing/#toc_specifying-a-root-url).
 
+          If your Ember.js application will be used in an environment where the
+          users don't have direct access to any data stored on the client (e.g.
+          [cordova](http://cordova.apache.org)) this action can be overridden to
+          simply transition to the `'index'` route.
+
           @method actions.sessionInvalidationSucceeded
         */
         sessionInvalidationSucceeded: function() {
-          window.location.replace(Configuration.applicationRootUrl);
+          if (!Ember.testing) {
+            window.location.replace(Configuration.applicationRootUrl);
+          }
         },
 
         /**
@@ -69925,7 +69986,7 @@ define("simple-auth/mixins/authentication-controller-mixin",
         authenticate: function(options) {
           var authenticator = this.get('authenticator');
           Ember.assert('AuthenticationControllerMixin/LoginControllerMixin require the authenticator property to be set on the controller', !Ember.isEmpty(authenticator));
-          return this.get(Configuration.sessionPropertyName).authenticate(this.get('authenticator'), options);
+          return this.get(Configuration.sessionPropertyName).authenticate(authenticator, options);
         }
       }
     });
@@ -70195,14 +70256,18 @@ define("simple-auth/session",
 
         @method authenticate
         @param {String} authenticator The authenticator factory to use as it is registered with Ember's container, see [Ember's API docs](http://emberjs.com/api/classes/Ember.Application.html#method_register)
-        @param {Object} options The options to pass to the authenticator; depending on the type of authenticator these might be a set of credentials, a Facebook OAuth Token, etc.
+        @param {Any} [...args] The arguments to pass to the authenticator; depending on the type of authenticator these might be a set of credentials, a Facebook OAuth Token, etc.
         @return {Ember.RSVP.Promise} A promise that resolves when the session was authenticated successfully
       */
-      authenticate: function(authenticator, options) {
+      authenticate: function() {
+        var args          = Array.prototype.slice.call(arguments);
+        var authenticator = args.shift();
         Ember.assert('Session#authenticate requires the authenticator factory to be specified, was ' + authenticator, !Ember.isEmpty(authenticator));
-        var _this = this;
+        var _this            = this;
+        var theAuthenticator = this.container.lookup(authenticator);
+        Ember.assert('No authenticator for factory "' + authenticator + '" could be found', !Ember.isNone(theAuthenticator));
         return new Ember.RSVP.Promise(function(resolve, reject) {
-          _this.container.lookup(authenticator).authenticate(options).then(function(content) {
+          theAuthenticator.authenticate.apply(theAuthenticator, args).then(function(content) {
             _this.setup(authenticator, content, true);
             resolve();
           }, function(error) {
@@ -70384,7 +70449,15 @@ define("simple-auth/setup",
     var LocalStorage = __dependency3__["default"];
     var Ephemeral = __dependency4__["default"];
 
+    var wildcardToken = '_wildcard_token_';
+
     function extractLocationOrigin(location) {
+      if (location === '*'){
+          return location;
+      }
+
+      location = location.replace('*', wildcardToken);
+
       if (Ember.typeOf(location) === 'string') {
         var link = document.createElement('a');
         link.href = location;
@@ -70402,14 +70475,26 @@ define("simple-auth/setup",
       return location.protocol + '//' + location.hostname + (port !== '' ? ':' + port : '');
     }
 
+    function matchDomain(urlOrigin){
+      return function(domain) {
+        if (domain.indexOf(wildcardToken) > -1) {
+          var domainRegex = new RegExp(domain.replace(wildcardToken , '.+'));
+          return urlOrigin.match(domainRegex);
+        }
+
+        return domain.indexOf(urlOrigin) > -1;
+      };
+    }
+
     var urlOrigins     = {};
     var crossOriginWhitelist;
     function shouldAuthorizeRequest(options) {
-      if (options.crossDomain === false) {
+      if (options.crossDomain === false || crossOriginWhitelist.indexOf('*') > -1) {
         return true;
       }
+
       var urlOrigin = urlOrigins[options.url] = urlOrigins[options.url] || extractLocationOrigin(options.url);
-      return crossOriginWhitelist.indexOf(urlOrigin) > -1;
+      return Ember.A(crossOriginWhitelist).any(matchDomain(urlOrigin));
     }
 
     function registerFactories(container) {
@@ -70417,6 +70502,21 @@ define("simple-auth/setup",
       container.register('simple-auth-session-store:ephemeral', Ephemeral);
       container.register('simple-auth-session:main', Session);
     }
+
+    function ajaxPrefilter(options, originalOptions, jqXHR) {
+      if (shouldAuthorizeRequest(options)) {
+        jqXHR.__simple_auth_authorized__ = true;
+        ajaxPrefilter.authorizer.authorize(jqXHR, options);
+      }
+    }
+
+    function ajaxError(event, jqXHR, setting, exception) {
+      if (!!jqXHR.__simple_auth_authorized__ && jqXHR.status === 401) {
+        ajaxError.session.trigger('authorizationFailed');
+      }
+    }
+
+    var didSetupAjaxHooks = false;
 
     /**
       @method setup
@@ -70429,7 +70529,7 @@ define("simple-auth/setup",
       var store   = container.lookup(Configuration.store);
       var session = container.lookup(Configuration.session);
       session.setProperties({ store: store, container: container });
-      Ember.A(['controller', 'route']).forEach(function(component) {
+      Ember.A(['controller', 'route', 'component']).forEach(function(component) {
         container.injection(component, Configuration.sessionPropertyName, Configuration.session);
       });
 
@@ -70439,19 +70539,15 @@ define("simple-auth/setup",
 
       if (!Ember.isEmpty(Configuration.authorizer)) {
         var authorizer = container.lookup(Configuration.authorizer);
-        if (!!authorizer) {
-          authorizer.set('session', session);
-          Ember.$.ajaxPrefilter(function(options, originalOptions, jqXHR) {
-            if (!authorizer.isDestroyed && shouldAuthorizeRequest(options)) {
-              jqXHR.__simple_auth_authorized__ = true;
-              authorizer.authorize(jqXHR, options);
-            }
-          });
-          Ember.$(document).ajaxError(function(event, jqXHR, setting, exception) {
-            if (!!jqXHR.__simple_auth_authorized__ && jqXHR.status === 401) {
-              session.trigger('authorizationFailed');
-            }
-          });
+        Ember.assert('The configured authorizer "' + Configuration.authorizer + '" could not be found in the container.', !Ember.isEmpty(authorizer));
+        authorizer.set('session', session);
+        ajaxPrefilter.authorizer = authorizer;
+        ajaxError.session = session;
+
+        if (!didSetupAjaxHooks) {
+          Ember.$.ajaxPrefilter('+*', ajaxPrefilter);
+          Ember.$(document).ajaxError(ajaxError);
+          didSetupAjaxHooks = true;
         }
       } else {
         Ember.Logger.info('No authorizer was configured for Ember Simple Auth - specify one if backend requests need to be authorized.');
@@ -70464,10 +70560,10 @@ define("simple-auth/setup",
     }
   });
 define("simple-auth/stores/base", 
-  ["../utils/flat-objects-are-equal","exports"],
+  ["../utils/objects-are-equal","exports"],
   function(__dependency1__, __exports__) {
     "use strict";
-    var flatObjectsAreEqual = __dependency1__["default"];
+    var objectsAreEqual = __dependency1__["default"];
 
     /**
       The base for all store types. __This serves as a starting point for
@@ -70475,12 +70571,11 @@ define("simple-auth/stores/base",
 
       Stores are used to persist the session's state so it survives a page reload
       and is synchronized across multiple tabs or windows of the same application.
-      The store to be used with the application can be configured in the global
-      configuration object:
+      The store to be used with the application can be configured on the
+      application's environment object:
 
       ```js
-      window.ENV = window.ENV || {};
-      window.ENV['simple-auth'] = {
+      ENV['simple-auth'] = {
         store: 'simple-auth-session-store:local-storage'
       }
       ```
@@ -70601,12 +70696,12 @@ define("simple-auth/stores/ephemeral",
     });
   });
 define("simple-auth/stores/local-storage", 
-  ["./base","../utils/flat-objects-are-equal","simple-auth/utils/get-global-config","exports"],
+  ["./base","../utils/objects-are-equal","../configuration","exports"],
   function(__dependency1__, __dependency2__, __dependency3__, __exports__) {
     "use strict";
     var Base = __dependency1__["default"];
-    var flatObjectsAreEqual = __dependency2__["default"];
-    var getGlobalConfig = __dependency3__["default"];
+    var objectsAreEqual = __dependency2__["default"];
+    var Configuration = __dependency3__["default"];
 
     /**
       Store that saves its data in the browser's `localStorage`.
@@ -70636,8 +70731,7 @@ define("simple-auth/stores/local-storage",
         @private
       */
       init: function() {
-        var globalConfig = getGlobalConfig('simple-auth');
-        this.key         = globalConfig.localStorageKey || this.key;
+        this.key = Configuration.localStorageKey;
 
         this.bindToStorageEvents();
       },
@@ -70674,7 +70768,7 @@ define("simple-auth/stores/local-storage",
       */
       clear: function() {
         localStorage.removeItem(this.key);
-        this._lastData = null;
+        this._lastData = {};
       },
 
       /**
@@ -70685,40 +70779,13 @@ define("simple-auth/stores/local-storage",
         var _this = this;
         Ember.$(window).bind('storage', function(e) {
           var data = _this.restore();
-          if (!flatObjectsAreEqual(data, _this._lastData)) {
+          if (!objectsAreEqual(data, _this._lastData)) {
             _this._lastData = data;
             _this.trigger('sessionDataUpdated', data);
           }
         });
       }
     });
-  });
-define("simple-auth/utils/flat-objects-are-equal", 
-  ["exports"],
-  function(__exports__) {
-    "use strict";
-    /**
-      @method flatObjectsAreEqual
-      @private
-    */
-    __exports__["default"] = function(a, b) {
-      function sortObject(object) {
-        var array = [];
-        for (var property in object) {
-          array.push([property, object[property]]);
-        }
-        return array.sort(function(a, b) {
-          if (a[0] < b[0]) {
-            return -1;
-          } else if (a[0] > b[0]) {
-            return 1;
-          } else {
-            return 0;
-          }
-        });
-      }
-      return JSON.stringify(sortObject(a)) === JSON.stringify(sortObject(b));
-    }
   });
 define("simple-auth/utils/get-global-config", 
   ["exports"],
@@ -70728,21 +70795,6 @@ define("simple-auth/utils/get-global-config",
 
     __exports__["default"] = function(scope) {
       return Ember.get(global, 'ENV.' + scope) || {};
-    }
-  });
-define("simple-auth/utils/is-secure-url", 
-  ["exports"],
-  function(__exports__) {
-    "use strict";
-    /**
-      @method isSecureUrl
-      @private
-    */
-    __exports__["default"] = function(url) {
-      var link  = document.createElement('a');
-      link.href = url;
-      link.href = link.href;
-      return link.protocol == 'https:';
     }
   });
 define("simple-auth/utils/load-config", 
@@ -70763,7 +70815,1808 @@ define("simple-auth/utils/load-config",
       };
     }
   });
-})((typeof global !== 'undefined') ? global : window);
+define("simple-auth/utils/objects-are-equal", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    /**
+      @method objectsAreEqual
+      @private
+    */
+    function objectsAreEqual(a, b) {
+      if (a === b) {
+        return true;
+      }
+      if (!(a instanceof Object) || !(b instanceof Object)) {
+        return false;
+      }
+      if(a.constructor !== b.constructor) {
+        return false;
+      }
+
+      for (var property in a) {
+        if (!a.hasOwnProperty(property)) {
+          continue;
+        }
+        if (!b.hasOwnProperty(property)) {
+          return false;
+        }
+        if (a[property] === b[property]) {
+          continue;
+        }
+        if (Ember.typeOf(a[property]) !== 'object') {
+          return false;
+        }
+        if (!objectsAreEqual(a[property], b[property])) {
+          return false;
+        }
+      }
+
+      for (property in b) {
+        if (b.hasOwnProperty(property) && !a.hasOwnProperty(property)) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    __exports__["default"] = objectsAreEqual;
+  });
+})(this);
+
+;/**
+ * Torii version: 0.2.2
+ * Built: Mon Nov 17 2014 15:17:01 GMT-0500 (EST)
+ */
+define("torii/adapters/application", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    var ApplicationAdapter = Ember.Object.extend({
+
+      open: function(){
+        return new Ember.RSVP.Promise(function(){
+          throw new Error(
+            'The Torii adapter must implement `open` for a session to be opened');
+        });
+      },
+
+      fetch: function(){
+        return new Ember.RSVP.Promise(function(){
+          throw new Error(
+            'The Torii adapter must implement `fetch` for a session to be fetched');
+        });
+      },
+
+      close: function(){
+        return new Ember.RSVP.Promise(function(){
+          throw new Error(
+            'The Torii adapter must implement `close` for a session to be closed');
+        });
+      }
+
+    });
+
+    __exports__["default"] = ApplicationAdapter;
+  });
+define("torii/bootstrap/session", 
+  ["torii/session","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Session = __dependency1__["default"];
+
+    __exports__["default"] = function(container, sessionName){
+      container.register('torii:session', Session);
+      container.injection('torii:session', 'torii', 'torii:main');
+      container.injection('route',      sessionName, 'torii:session');
+      container.injection('controller', sessionName, 'torii:session');
+
+      return container;
+    }
+  });
+define("torii/bootstrap/torii", 
+  ["torii/torii","torii/providers/linked-in-oauth2","torii/providers/google-oauth2","torii/providers/facebook-connect","torii/providers/facebook-oauth2","torii/adapters/application","torii/providers/twitter-oauth1","torii/providers/github-oauth2","torii/services/popup","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __dependency5__, __dependency6__, __dependency7__, __dependency8__, __dependency9__, __exports__) {
+    "use strict";
+    var Torii = __dependency1__["default"];
+    var LinkedInOauth2Provider = __dependency2__["default"];
+    var GoogleOauth2Provider = __dependency3__["default"];
+    var FacebookConnectProvider = __dependency4__["default"];
+    var FacebookOauth2Provider = __dependency5__["default"];
+    var ApplicationAdapter = __dependency6__["default"];
+    var TwitterProvider = __dependency7__["default"];
+    var GithubOauth2Provider = __dependency8__["default"];
+
+    var PopupService = __dependency9__["default"];
+
+    __exports__["default"] = function(container){
+      container.register('torii:main', Torii);
+      container.register('torii-provider:linked-in-oauth2', LinkedInOauth2Provider);
+      container.register('torii-provider:google-oauth2', GoogleOauth2Provider);
+      container.register('torii-provider:facebook-connect', FacebookConnectProvider);
+      container.register('torii-provider:facebook-oauth2', FacebookOauth2Provider);
+      container.register('torii-provider:twitter', TwitterProvider);
+      container.register('torii-provider:github-oauth2', GithubOauth2Provider);
+      container.register('torii-adapter:application', ApplicationAdapter);
+
+      container.register('torii-service:popup', PopupService);
+
+      container.injection('torii-provider', 'popup', 'torii-service:popup');
+
+      if (window.DS) {
+        container.injection('torii-provider', 'store', 'store:main');
+        container.injection('torii-adapter', 'store', 'store:main');
+      }
+
+      return container;
+    }
+  });
+define("torii/configuration", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    var get = Ember.get;
+
+    var configuration       = require("scamp/config/environment")["default"].torii || {};
+    configuration.providers = configuration.providers || {};
+
+    function configurable(configKey, defaultValue){
+      return Ember.computed(function(){
+        var namespace = this.get('configNamespace'),
+            fullKey   = namespace ? [namespace, configKey].join('.') : configKey,
+            value     = get(configuration, fullKey);
+        if (typeof value === 'undefined') {
+          if (typeof defaultValue !== 'undefined') {
+            if (typeof defaultValue === 'function') {
+              return defaultValue.call(this);
+            } else {
+              return defaultValue;
+            }
+          } else {
+            throw new Error("Expected configuration value "+fullKey+" to be defined!");
+          }
+        }
+        return value;
+      });
+    }
+
+    __exports__.configurable = configurable;
+
+    __exports__["default"] = configuration;
+  });
+define("torii/initializers/initialize-torii-callback", 
+  ["torii/redirect-handler","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var RedirectHandler = __dependency1__["default"];
+
+    __exports__["default"] = {
+      name: 'torii-callback',
+      before: 'torii',
+      initialize: function(container, app){
+        app.deferReadiness();
+        RedirectHandler.handle(window.location.toString())["catch"](function(){
+          app.advanceReadiness();
+        });
+      }
+    };
+  });
+define("torii/initializers/initialize-torii-session", 
+  ["torii/configuration","torii/bootstrap/session","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var configuration = __dependency1__["default"];
+    var bootstrapSession = __dependency2__["default"];
+
+    __exports__["default"] = {
+      name: 'torii-session',
+      after: 'torii',
+
+      initialize: function(container){
+        if (configuration.sessionServiceName) {
+          bootstrapSession(container, configuration.sessionServiceName);
+          container.injection('adapter', configuration.sessionServiceName, 'torii:session');
+        }
+      }
+    };
+  });
+define("torii/initializers/initialize-torii", 
+  ["torii/bootstrap/torii","torii/configuration","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var bootstrapTorii = __dependency1__["default"];
+    var configuration = __dependency2__["default"];
+
+    var initializer = {
+      name: 'torii',
+      initialize: function(container, app){
+        bootstrapTorii(container);
+
+        // Walk all configured providers and eagerly instantiate
+        // them. This gives providers with initialization side effects
+        // like facebook-connect a chance to load up assets.
+        for (var key in  configuration.providers) {
+          if (configuration.providers.hasOwnProperty(key)) {
+            container.lookup('torii-provider:'+key);
+          }
+        }
+
+        app.inject('route', 'torii', 'torii:main');
+      }
+    };
+
+    if (window.DS) {
+      initializer.after = 'store';
+    }
+
+    __exports__["default"] = initializer;
+  });
+define("torii/lib/load-initializer", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    /* global Ember */
+    __exports__["default"] = function(initializer){
+      Ember.onLoad('Ember.Application', function(Application){
+        Application.initializer(initializer);
+      });
+    }
+  });
+define("torii/lib/parse-query-string", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    __exports__["default"] = Ember.Object.extend({
+      init: function(url, validKeys) {
+        this.url = url;
+        this.validKeys = validKeys;
+      },
+
+      parse: function(){
+        var url       = this.url,
+            validKeys = this.validKeys,
+            data      = {};
+
+        for (var i = 0; i < validKeys.length; i++) {
+          var key = validKeys[i],
+              regex = new RegExp(key + "=([^&#]*)"),
+              match = regex.exec(url);
+          if (match) {
+            data[key] = match[1];
+          }
+        }
+        return data;
+      }
+    });
+  });
+define("torii/lib/query-string", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    var camelize = Ember.String.camelize,
+        get      = Ember.get;
+
+    function isValue(value){
+      return (value || value === false);
+    }
+
+    function getParamValue(obj, paramName, optional){
+      var camelizedName = camelize(paramName),
+          value         = get(obj, camelizedName);
+
+      if (!optional) {
+        if ( !isValue(value) && isValue(get(obj, paramName))) {
+          throw new Error(
+            'Use camelized versions of url params. (Did not find ' +
+            '"' + camelizedName + '" property but did find ' +
+            '"' + paramName + '".');
+        }
+
+        if (!isValue(value)) {
+          throw new Error(
+            'Missing url param: "'+paramName+'". (Looked for: property named "' +
+            camelizedName + '".'
+          );
+        }
+      }
+
+      return isValue(value) ? encodeURIComponent(value) : undefined;
+    }
+
+    function getOptionalParamValue(obj, paramName){
+      return getParamValue(obj, paramName, true);
+    }
+
+    __exports__["default"] = Ember.Object.extend({
+      init: function(obj, urlParams, optionalUrlParams){
+        this.obj               = obj;
+        this.urlParams         = Ember.A(urlParams).uniq();
+        this.optionalUrlParams = Ember.A(optionalUrlParams || []).uniq();
+
+        this.optionalUrlParams.forEach(function(param){
+          if (this.urlParams.indexOf(param) > -1) {
+            throw "Required parameters cannot also be optional: '" + param + "'";
+          }
+        }, this);
+      },
+
+      toString: function(){
+        var urlParams         = this.urlParams,
+            optionalUrlParams = this.optionalUrlParams,
+            obj               = this.obj,
+            keyValuePairs     = Ember.A([]);
+
+        urlParams.forEach(function(paramName){
+          var paramValue = getParamValue(obj, paramName);
+
+          keyValuePairs.push( [paramName, paramValue] );
+        });
+
+        optionalUrlParams.forEach(function(paramName){
+          var paramValue = getOptionalParamValue(obj, paramName);
+
+          if (isValue(paramValue)) {
+            keyValuePairs.push( [paramName, paramValue] );
+          }
+        });
+
+        return keyValuePairs.map(function(pair){
+          return pair.join('=');
+        }).join('&');
+      }
+    });
+  });
+define("torii/lib/required-property", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    function requiredProperty(){
+      return Ember.computed(function(key){
+        throw new Error("Definition of property "+key+" by a subclass is required.");
+      });
+    }
+
+    __exports__["default"] = requiredProperty;
+  });
+define("torii/lib/state-machine", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    /*
+     * Modification of Stefan Penner's StateMachine.js: https://github.com/stefanpenner/state_machine.js/
+     *
+     * This modification requires Ember.js to be loaded first
+     */
+
+    var a_slice = Array.prototype.slice;
+    var o_keys = Ember.keys;
+
+    function makeArray(entry){
+      if (entry.constructor === Array) {
+        return entry;
+      }else if(entry) {
+        return [entry];
+      }else{
+        return [];
+      }
+    }
+
+    function StateMachine(options){
+      var initialState = options.initialState;
+      this.states = options.states;
+
+      if (!this.states) {
+        throw new Error('StateMachine needs states');
+      }
+
+      this.state  = this.states[initialState];
+
+      if (!this.state) {
+        throw new Error('Missing initial state');
+      }
+
+      this.currentStateName = initialState;
+
+      this._subscriptions = {};
+
+      var beforeTransitions = (options.beforeTransitions ||[]);
+      var afterTransitions  = (options.afterTransitions ||[]);
+      var rule;
+
+      var i, length;
+      for(i = 0, length = beforeTransitions.length; length > i; i++){
+        rule = beforeTransitions[i];
+        this.beforeTransition.call(this, rule, rule.fn);
+      }
+
+      for(i = 0, length = afterTransitions.length; length > i; i++){
+        rule = afterTransitions[i];
+        this.afterTransition.call(this, rule, rule.fn);
+      }
+    }
+
+    var SPLAT = StateMachine.SPLAT = '*';
+
+    StateMachine.transitionTo = function(state){
+      return function(){
+        this.transitionTo(state);
+      };
+    };
+
+    StateMachine.prototype = {
+      states: {},
+      toString: function(){
+        return "<StateMachine currentState:'" + this.currentStateName +"' >";
+      },
+
+      transitionTo: function(nextStateName){
+        if (nextStateName.charAt(0) === '.') {
+          var splits = this.currentStateName.split('.').slice(0,-1);
+
+          // maybe all states should have an implicit leading dot (kinda like dns)
+          if (0 < splits.length){
+            nextStateName = splits.join('.') + nextStateName;
+          } else {
+            nextStateName = nextStateName.substring(1);
+          }
+        }
+
+        var state = this.states[nextStateName],
+        stateName = this.currentStateName;
+
+        if (!state) {
+          throw new Error('Unknown State: `' + nextStateName + '`');
+        }
+        this.willTransition(stateName, nextStateName);
+
+        this.state = state;
+
+        this.currentStateName = nextStateName;
+        this.didTransition(stateName, nextStateName);
+      },
+
+      beforeTransition: function(options, fn) {
+        this._transition('willTransition', options, fn);
+      },
+
+      afterTransition: function(options, fn) {
+        this._transition('didTransition', options, fn);
+      },
+
+      _transition: function(event, filter, fn) {
+        var from = filter.from || SPLAT,
+          to = filter.to || SPLAT,
+          context = this,
+          matchingTo, matchingFrom,
+          toSplatOffset, fromSplatOffset,
+          negatedMatchingTo, negatedMatchingFrom;
+
+        if (to.indexOf('!') === 0) {
+          matchingTo = to.substr(1);
+          negatedMatchingTo = true;
+        } else {
+          matchingTo = to;
+          negatedMatchingTo = false;
+        }
+
+        if (from.indexOf('!') === 0) {
+          matchingFrom = from.substr(1);
+          negatedMatchingFrom = true;
+        } else {
+          matchingFrom = from;
+          negatedMatchingFrom = false;
+        }
+
+        fromSplatOffset = matchingFrom.indexOf(SPLAT);
+        toSplatOffset = matchingTo.indexOf(SPLAT);
+
+        if (fromSplatOffset >= 0) {
+          matchingFrom = matchingFrom.substring(fromSplatOffset, 0);
+        }
+
+        if (toSplatOffset >= 0) {
+          matchingTo = matchingTo.substring(toSplatOffset, 0);
+        }
+
+        this.on(event, function(currentFrom, currentTo) {
+          var currentMatcherTo = currentTo,
+            currentMatcherFrom = currentFrom,
+            toMatches, fromMatches;
+
+          if (fromSplatOffset >= 0){
+            currentMatcherFrom = currentFrom.substring(fromSplatOffset, 0);
+          }
+
+          if (toSplatOffset >= 0){
+            currentMatcherTo = currentTo.substring(toSplatOffset, 0);
+          }
+
+          toMatches = (currentMatcherTo === matchingTo) !== negatedMatchingTo;
+          fromMatches = (currentMatcherFrom === matchingFrom) !== negatedMatchingFrom;
+
+          if (toMatches && fromMatches) {
+            fn.call(this, currentFrom, currentTo);
+          }
+        });
+      },
+
+      willTransition: function(from, to) {
+        this._notify('willTransition', from, to);
+      },
+
+      didTransition: function(from, to) {
+        this._notify('didTransition', from, to);
+      },
+
+      _notify: function(name, from, to) {
+        var subscriptions = (this._subscriptions[name] || []);
+
+        for( var i = 0, length = subscriptions.length; i < length; i++){
+          subscriptions[i].call(this, from, to);
+        }
+      },
+
+      on: function(event, fn) {
+        this._subscriptions[event] = this._subscriptions[event] || [];
+        this._subscriptions[event].push(fn);
+      },
+
+      off: function(event, fn) {
+        var idx = this._subscriptions[event].indexOf(fn);
+
+        if (fn){
+          if (idx) {
+            this._subscriptions[event].splice(idx, 1);
+          }
+        }else {
+          this._subscriptions[event] = null;
+        }
+      },
+
+      send: function(eventName) {
+        var event = this.state[eventName];
+        var args = a_slice.call(arguments, 1);
+
+        if (event) {
+          return event.apply(this, args);
+        } else {
+          this.unhandledEvent(eventName);
+        }
+      },
+
+      trySend: function(eventName) {
+        var event = this.state[eventName];
+        var args = a_slice.call(arguments,1);
+
+        if (event) {
+          return event.apply(this, args);
+        }
+      },
+
+      event: function(eventName, callback){
+        var states = this.states;
+
+        var eventApi = {
+          transition: function() {
+            var length = arguments.length,
+            first = arguments[0],
+            second = arguments[1],
+            events = normalizeEvents(eventName, first, second);
+
+            o_keys(events).forEach(function(from){
+              var to = events[from];
+              compileEvent(states, eventName, from, to, StateMachine.transitionTo(to));
+            });
+          }
+        };
+
+        callback.call(eventApi);
+      },
+
+      unhandledEvent: function(event){
+        var currentStateName = this.currentStateName,
+        message = "Unknown Event: `" + event + "` for: " + this.toString();
+
+        throw new Error(message);
+      }
+    };
+
+    function normalizeEvents(eventName, first, second){
+      var events;
+      if (!first) { throw new Error('invalid Transition'); }
+
+      if (second) {
+        var froms = first, to = second;
+        events = expandArrayEvents(froms, to);
+      } else {
+        if (first.constructor === Object) {
+          events = first;
+        } else {
+          throw new Error('something went wrong');
+        }
+      }
+
+      return events;
+    }
+
+    function expandArrayEvents(froms, to){
+      return  makeArray(froms).reduce(function(events, from){
+         events[from] = to;
+         return events;
+       }, {});
+    }
+
+    function compileEvent(states, eventName, from, to, fn){
+      var state = states[from];
+
+      if (from && to && state) {
+        states[from][eventName] = fn;
+      } else {
+        var message = "invalid transition state: " + (state && state.currentStateName) + " from: " + from+ " to: " + to ;
+        throw new Error(message);
+      }
+    }
+
+    __exports__["default"] = StateMachine;
+  });
+define("torii/load-initializers", 
+  ["torii/lib/load-initializer","torii/initializers/initialize-torii","torii/initializers/initialize-torii-callback","torii/initializers/initialize-torii-session","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
+    "use strict";
+    var loadInitializer = __dependency1__["default"];
+    var initializeTorii = __dependency2__["default"];
+    var initializeToriiCallback = __dependency3__["default"];
+    var initializeToriiSession = __dependency4__["default"];
+
+    __exports__["default"] = function(){
+      loadInitializer(initializeToriiCallback);
+      loadInitializer(initializeTorii);
+      loadInitializer(initializeToriiSession);
+    }
+  });
+define("torii/providers/base", 
+  ["torii/lib/required-property","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var requiredProperty = __dependency1__["default"];
+
+    /**
+     * The base class for all torii providers
+     * @class BaseProvider
+     */
+    var Base = Ember.Object.extend({
+
+     /**
+      * The name of the provider
+      * @property {string} name
+      */
+      name: requiredProperty(),
+
+      /**
+       * The name of the configuration property
+       * that holds config information for this provider.
+       * @property {string} configNamespace
+       */
+      configNamespace: function(){
+        return 'providers.'+this.get('name');
+      }.property('name')
+
+    });
+
+    __exports__["default"] = Base;
+  });
+define("torii/providers/facebook-connect", 
+  ["torii/providers/base","torii/configuration","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    /* global FB, $ */
+
+    /**
+     * This class implements authentication against facebook
+     * connect using the Facebook SDK.
+     */
+
+    var Provider = __dependency1__["default"];
+    var configurable = __dependency2__.configurable;
+
+    var fbPromise;
+
+    function fbLoad(settings){
+      if (fbPromise) { return fbPromise; }
+
+      var original = window.fbAsyncInit;
+      fbPromise = new Ember.RSVP.Promise(function(resolve, reject){
+        window.fbAsyncInit = function(){
+          FB.init(settings);
+          Ember.run(null, resolve);
+        };
+        $.getScript('//connect.facebook.net/en_US/all.js');
+      }).then(function(){
+        window.fbAsyncInit = original;
+      });
+
+      return fbPromise;
+    }
+
+    function fbLogin(scope){
+      return new Ember.RSVP.Promise(function(resolve, reject){
+        FB.login(function(response){
+          if (response.authResponse) {
+            Ember.run(null, resolve, response.authResponse);
+          } else {
+            Ember.run(null, reject, response.status);
+          }
+        }, { scope: scope });
+      });
+    }
+
+    function fbNormalize(response){
+      return {
+        userId: response.userID,
+        accessToken: response.accessToken
+      };
+    }
+
+    var Facebook = Provider.extend({
+
+      // Required settings:
+      name:  'facebook-connect',
+      scope: configurable('scope', 'email'),
+      appId: configurable('appId'),
+
+      // API:
+      //
+      open: function(){
+        var scope = this.get('scope');
+
+        return fbLoad( this.settings() )
+          .then(function(){
+            return fbLogin(scope);
+          })
+          .then(fbNormalize);
+      },
+
+      settings: function(){
+        return {
+          status: true,
+          cookie: true,
+          xfbml: false,
+          appId: this.get('appId')
+        };
+      },
+
+      // Load Facebook's script eagerly, so that the window.open
+      // in FB.login will be part of the same JS frame as the
+      // click itself.
+      loadFbLogin: function(){
+        fbLoad( this.settings() );
+      }.on('init')
+
+    });
+
+    __exports__["default"] = Facebook;
+  });
+define("torii/providers/facebook-oauth2", 
+  ["torii/configuration","torii/providers/oauth2-code","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var configurable = __dependency1__.configurable;
+    var Oauth2 = __dependency2__["default"];
+
+    __exports__["default"] = Oauth2.extend({
+      name:    'facebook-oauth2',
+      baseUrl: 'https://www.facebook.com/dialog/oauth',
+
+      // Additional url params that this provider requires
+      requiredUrlParams: ['display'],
+
+      responseParams: ['code'],
+
+      scope:        configurable('scope', 'email'),
+
+      display: 'popup',
+      redirectUri: configurable('redirectUri', function(){
+        // A hack that allows redirectUri to be configurable
+        // but default to the superclass
+        return this._super();
+      }),
+
+      open: function() {
+        return this._super().then(function(authData){
+          if (authData.authorizationCode && authData.authorizationCode === '200') {
+            // indication that the user hit 'cancel', not 'ok'
+            throw 'User canceled authorization';
+          }
+
+          return authData;
+        });
+      }
+    });
+  });
+define("torii/providers/github-oauth2", 
+  ["torii/providers/oauth2-code","torii/configuration","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var Oauth2 = __dependency1__["default"];
+    var configurable = __dependency2__.configurable;
+
+    /**
+     * This class implements authentication against Github
+     * using the OAuth2 authorization flow in a popup window.
+     * @class
+     */
+    var GithubOauth2 = Oauth2.extend({
+      name:       'github-oauth2',
+      baseUrl:    'https://github.com/login/oauth/authorize',
+
+      // additional url params that this provider requires
+      requiredUrlParams: ['state'],
+
+      responseParams: ['code'],
+
+      state: 'STATE',
+
+      redirectUri: configurable('redirectUri', function(){
+        // A hack that allows redirectUri to be configurable
+        // but default to the superclass
+        return this._super();
+      })
+    });
+
+    __exports__["default"] = GithubOauth2;
+  });
+define("torii/providers/google-oauth2", 
+  ["torii/providers/oauth2-code","torii/configuration","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    /**
+     * This class implements authentication against google
+     * using the OAuth2 authorization flow in a popup window.
+     */
+
+    var Oauth2 = __dependency1__["default"];
+    var configurable = __dependency2__.configurable;
+
+    var GoogleOauth2 = Oauth2.extend({
+
+      name:    'google-oauth2',
+      baseUrl: 'https://accounts.google.com/o/oauth2/auth',
+
+      // additional params that this provider requires
+      requiredUrlParams: ['state'],
+      optionalUrlParams: ['scope', 'request_visible_actions'],
+
+      requestVisibleActions: configurable('requestVisibleActions', ''),
+
+      responseParams: ['code'],
+
+      scope: configurable('scope', 'email'),
+
+      state: configurable('state', 'STATE'),
+
+      redirectUri: configurable('redirectUri',
+                                'http://localhost:8000/oauth2callback')
+    });
+
+    __exports__["default"] = GoogleOauth2;
+  });
+define("torii/providers/linked-in-oauth2", 
+  ["torii/providers/oauth2-code","torii/configuration","exports"],
+  function(__dependency1__, __dependency2__, __exports__) {
+    "use strict";
+    var Oauth2 = __dependency1__["default"];
+    var configurable = __dependency2__.configurable;
+
+    /**
+     * This class implements authentication against Linked In
+     * using the OAuth2 authorization flow in a popup window.
+     *
+     * @class LinkedInOauth2
+     */
+    var LinkedInOauth2 = Oauth2.extend({
+      name:       'linked-in-oauth2',
+      baseUrl:    'https://www.linkedin.com/uas/oauth2/authorization',
+
+      // additional url params that this provider requires
+      requiredUrlParams: ['state'],
+
+      responseParams: ['code'],
+
+      state: 'STATE',
+
+      redirectUri: configurable('redirectUri', function(){
+        // A hack that allows redirectUri to be configurable
+        // but default to the superclass
+        return this._super();
+      })
+
+    });
+
+    __exports__["default"] = LinkedInOauth2;
+  });
+define("torii/providers/oauth1", 
+  ["torii/providers/base","torii/configuration","torii/lib/query-string","torii/lib/required-property","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
+    "use strict";
+    /*
+     * This class implements authentication against an API
+     * using the OAuth1.0a request token flow in a popup window.
+     */
+
+    var Provider = __dependency1__["default"];
+    var configurable = __dependency2__.configurable;
+    var QueryString = __dependency3__["default"];
+    var requiredProperty = __dependency4__["default"];
+
+    function currentUrl(){
+      return [window.location.protocol,
+              "//",
+              window.location.host,
+              window.location.pathname].join('');
+    }
+
+    var Oauth1 = Provider.extend({
+      name: 'oauth1',
+
+      requestTokenUri: configurable('requestTokenUri'),
+
+      buildRequestTokenUrl: function(){
+        var requestTokenUri = this.get('requestTokenUri');
+        return requestTokenUri;
+      },
+
+      open: function(){
+        var name        = this.get('name'),
+            url         = this.buildRequestTokenUrl();
+
+        return this.get('popup').open(url, ['code']).then(function(authData){
+          authData.provider = name;
+          return authData;
+        });
+      }
+    });
+
+    __exports__["default"] = Oauth1;
+  });
+define("torii/providers/oauth2-bearer", 
+  ["torii/providers/oauth2-code","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Provider = __dependency1__["default"];
+
+    var Oauth2Bearer = Provider.extend({
+      responseType: 'token',
+
+      /**
+       * @method open
+       * @return {Promise<object>} If the authorization attempt is a success,
+       * the promise will resolve an object containing the following keys:
+       *   - authorizationToken: The `token` from the 3rd-party provider
+       *   - provider: The name of the provider (i.e., google-oauth2)
+       *   - redirectUri: The redirect uri (some server-side exchange flows require this)
+       * If there was an error or the user either canceled the authorization or
+       * closed the popup window, the promise rejects.
+       */
+      open: function(){
+        var name        = this.get('name'),
+            url         = this.buildUrl(),
+            redirectUri = this.get('redirectUri'),
+            responseParams = this.get('responseParams');
+
+        return this.get('popup').open(url, responseParams).then(function(authData){
+          var missingResponseParams = [];
+
+          responseParams.forEach(function(param){
+            if (authData[param] === undefined) {
+              missingResponseParams.push(param);
+            }
+          });
+
+          if (missingResponseParams.length){
+            throw "The response from the provider is missing " +
+                  "these required response params: " + responseParams.join(', ');
+          }
+
+          return {
+            authorizationToken: authData,
+            provider: name,
+            redirectUri: redirectUri
+          };
+        });
+      }
+    });
+
+    __exports__["default"] = Oauth2Bearer;
+  });
+define("torii/providers/oauth2-code", 
+  ["torii/providers/base","torii/configuration","torii/lib/query-string","torii/lib/required-property","exports"],
+  function(__dependency1__, __dependency2__, __dependency3__, __dependency4__, __exports__) {
+    "use strict";
+    var Provider = __dependency1__["default"];
+    var configurable = __dependency2__.configurable;
+    var QueryString = __dependency3__["default"];
+    var requiredProperty = __dependency4__["default"];
+
+    function currentUrl(){
+      return [window.location.protocol,
+              "//",
+              window.location.host,
+              window.location.pathname].join('');
+    }
+
+    /**
+     * Implements authorization against an OAuth2 API
+     * using the OAuth2 authorization flow in a popup window.
+     *
+     * Subclasses should extend this class and define the following properties:
+     *   - requiredUrlParams: If there are additional required params
+     *   - optionalUrlParams: If there are additional optional params
+     *   - name: The name used in the configuration `providers` key
+     *   - baseUrl: The base url for OAuth2 code-based flow at the 3rd-party
+     *
+     *   If there are any additional required or optional url params,
+     *   include default values for them (if appropriate).
+     *
+     * @class Oauth2Provider
+     */
+    var Oauth2 = Provider.extend({
+      concatenatedProperties: ['requiredUrlParams','optionalUrlParams'],
+
+      /**
+       * The parameters that must be included as query params in the 3rd-party provider's url that we build.
+       * These properties are in the format that should be in the URL (i.e.,
+       * usually underscored), but they are looked up as camelCased properties
+       * on the instance of this provider. For example, if the 'client_id' is
+       * a required url param, when building the URL we look up the value of
+       * the 'clientId' (camel-cased) property and put it in the URL as
+       * 'client_id=' + this.get('clientId')
+       * Subclasses can add additional required url params.
+       *
+       * @property {array} requiredUrlParams
+       */
+      requiredUrlParams: ['response_type', 'client_id', 'redirect_uri'],
+
+      /**
+       * Parameters that may be included in the 3rd-party provider's url that we build.
+       * Subclasses can add additional optional url params.
+       *
+       * @property {array} optionalUrlParams
+       */
+      optionalUrlParams: ['scope'],
+
+      /**
+       * The base url for the 3rd-party provider's OAuth2 flow (example: 'https://github.com/login/oauth/authorize')
+       *
+       * @property {string} baseUrl
+       */
+      baseUrl:      requiredProperty(),
+
+      /**
+       * The apiKey (sometimes called app id) that identifies the registered application at the 3rd-party provider
+       *
+       * @property {string} apiKey
+       */
+      apiKey:       configurable('apiKey'),
+
+      scope:        configurable('scope', null),
+      clientId:     Ember.computed.alias('apiKey'),
+
+      /**
+       * The oauth response type we expect from the third party provider. Hardcoded to 'code' for oauth2-code flows
+       * @property {string} responseType
+       */
+      responseType: 'code',
+
+     /**
+      * List of parameters that we expect
+      * to see in the query params that the 3rd-party provider appends to
+      * our `redirectUri` after the user confirms/denies authorization.
+      * If any of these parameters are missing, the OAuth attempt is considered
+      * to have failed (usually this is due to the user hitting the 'cancel' button)
+      *
+      * @property {array} responseParams
+      */
+      responseParams: requiredProperty(),
+
+      redirectUri: function(){
+        return currentUrl();
+      }.property(),
+
+      buildQueryString: function(){
+        var requiredParams = this.get('requiredUrlParams'),
+            optionalParams = this.get('optionalUrlParams');
+
+        var qs = new QueryString(this, requiredParams, optionalParams);
+        return qs.toString();
+      },
+
+      buildUrl: function(){
+        var base = this.get('baseUrl'),
+            qs   = this.buildQueryString();
+
+        return [base, qs].join('?');
+      },
+
+      /**
+       * @method open
+       * @return {Promise<object>} If the authorization attempt is a success,
+       * the promise will resolve an object containing the following keys:
+       *   - authorizationCode: The `code` from the 3rd-party provider
+       *   - provider: The name of the provider (i.e., google-oauth2)
+       *   - redirectUri: The redirect uri (some server-side exchange flows require this)
+       * If there was an error or the user either canceled the authorization or
+       * closed the popup window, the promise rejects.
+       */
+      open: function(){
+        var name        = this.get('name'),
+            url         = this.buildUrl(),
+            redirectUri = this.get('redirectUri'),
+            responseParams = this.get('responseParams');
+
+        return this.get('popup').open(url, responseParams).then(function(authData){
+          var missingResponseParams = [];
+
+          responseParams.forEach(function(param){
+            if (authData[param] === undefined) {
+              missingResponseParams.push(param);
+            }
+          });
+
+          if (missingResponseParams.length){
+            throw "The response from the provider is missing " +
+                  "these required response params: " + responseParams.join(', ');
+          }
+
+          return {
+            authorizationCode: authData.code,
+            provider: name,
+            redirectUri: redirectUri
+          };
+        });
+      }
+    });
+
+    __exports__["default"] = Oauth2;
+  });
+define("torii/providers/twitter-oauth1", 
+  ["torii/providers/oauth1","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Oauth1Provider = __dependency1__["default"];
+
+    __exports__["default"] = Oauth1Provider.extend({
+      name: 'twitter'
+    });
+  });
+define("torii/redirect-handler", 
+  ["./services/popup","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    /**
+     * RedirectHandler will attempt to find
+     * these keys in the URL. If found,
+     * this is an indication to Torii that
+     * the Ember app has loaded inside a popup
+     * and should postMessage this data to window.opener
+     */
+
+    var postMessageFixed = __dependency1__.postMessageFixed;
+    var readToriiMessage = __dependency1__.readToriiMessage;
+
+    var RedirectHandler = Ember.Object.extend({
+
+      init: function(url){
+        this.url = url;
+      },
+
+      run: function(){
+        var url = this.url;
+        return new Ember.RSVP.Promise(function(resolve, reject){
+          if (window.opener && window.opener.name === 'torii-opener') {
+            postMessageFixed(window.opener, url);
+            window.close();
+          } else {
+            reject('No window.opener');
+          }
+        });
+      }
+
+    });
+
+    RedirectHandler.reopenClass({
+      // untested
+      handle: function(url){
+        var handler = new RedirectHandler(url);
+        return handler.run();
+      }
+    });
+
+    __exports__["default"] = RedirectHandler;
+  });
+define("torii/services/popup", 
+  ["torii/lib/parse-query-string","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var ParseQueryString = __dependency1__["default"];
+
+    var postMessageFixed;
+    var postMessageDomain = window.location.protocol+'//'+window.location.host;
+    var postMessagePrefix = "__torii_message:";
+    // in IE11 window.attachEvent was removed.
+    if (window.attachEvent) {
+      postMessageFixed = function postMessageFixed(win, data) {
+        win.postMessageWithFix(postMessagePrefix+data, postMessageDomain);
+      };
+      window.postMessageWithFix = function postMessageWithFix(data, domain) {
+        setTimeout(function(){
+          window.postMessage(data, domain);
+        }, 0);
+      };
+    } else {
+      postMessageFixed = function postMessageFixed(win, data) {
+        win.postMessage(postMessagePrefix+data, postMessageDomain);
+      };
+    }
+
+    __exports__.postMessageFixed = postMessageFixed;
+
+    function stringifyOptions(options){
+      var optionsStrings = [];
+      for (var key in options) {
+        if (options.hasOwnProperty(key)) {
+          var value;
+          switch (options[key]) {
+            case true:
+              value = '1';
+              break;
+            case false:
+              value = '0';
+              break;
+            default:
+              value = options[key];
+          }
+          optionsStrings.push(
+            key+"="+value
+          );
+        }
+      }
+      return optionsStrings.join(',');
+    }
+
+    function prepareOptions(options){
+      var width = options.width || 500,
+          height = options.height || 500;
+      return Ember.$.extend({
+        left: ((screen.width / 2) - (width / 2)),
+        top: ((screen.height / 2) - (height / 2)),
+        width: width,
+        height: height
+      }, options);
+    }
+
+    function readToriiMessage(message){
+      if (message && typeof message === 'string' && message.indexOf(postMessagePrefix) === 0) {
+        return message.slice(postMessagePrefix.length);
+      }
+    }
+
+    __exports__.readToriiMessage = readToriiMessage;
+
+    function parseMessage(url, keys){
+      var parser = new ParseQueryString(url, keys),
+          data = parser.parse();
+      return data;
+    }
+
+    var Popup = Ember.Object.extend(Ember.Evented, {
+
+      // Open a popup window. Returns a promise that resolves or rejects
+      // accoring to if the popup is redirected with arguments in the URL.
+      //
+      // For example, an OAuth2 request:
+      //
+      // popup.open('http://some-oauth.com', ['code']).then(function(data){
+      //   // resolves with data.code, as from http://app.com?code=13124
+      // });
+      //
+      open: function(url, keys, options){
+        var service   = this,
+            lastPopup = this.popup;
+
+        var oldName = window.name;
+        // Is checked by the popup to see if it was opened by Torii
+        window.name = 'torii-opener';
+
+        return new Ember.RSVP.Promise(function(resolve, reject){
+          if (lastPopup) {
+            service.close();
+          }
+
+          var optionsString = stringifyOptions(prepareOptions(options || {}));
+          service.popup = window.open(url, 'torii-auth', optionsString);
+
+          if (service.popup && !service.popup.closed) {
+            service.popup.focus();
+          } else {
+            reject(new Error(
+              'Popup could not open or was closed'));
+            return;
+          }
+
+          service.one('didClose', function(){
+            reject(new Error(
+              'Popup was closed or authorization was denied'));
+          });
+
+          Ember.$(window).on('message.torii', function(event){
+            var message = event.originalEvent.data;
+            var toriiMessage = readToriiMessage(message);
+            if (toriiMessage) {
+              var data = parseMessage(toriiMessage, keys);
+              resolve(data);
+            }
+          });
+
+          service.schedulePolling();
+
+        })["finally"](function(){
+          // didClose will reject this same promise, but it has already resolved.
+          service.close();
+          window.name = oldName;
+          Ember.$(window).off('message.torii');
+        });
+      },
+
+      close: function(){
+        if (this.popup) {
+          this.popup = null;
+          this.trigger('didClose');
+        }
+      },
+
+      pollPopup: function(){
+        if (!this.popup) {
+          return;
+        }
+        if (this.popup.closed) {
+          this.trigger('didClose');
+        }
+      },
+
+      schedulePolling: function(){
+        this.polling = Ember.run.later(this, function(){
+          this.pollPopup();
+          this.schedulePolling();
+        }, 35);
+      },
+
+      stopPolling: function(){
+        Ember.run.cancel(this.polling);
+      }.on('didClose'),
+
+
+    });
+
+    __exports__["default"] = Popup;
+  });
+define("torii/session", 
+  ["torii/session/state-machine","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var createStateMachine = __dependency1__["default"];
+
+    function lookupAdapter(container, authenticationType){
+      var adapter = container.lookup('torii-adapter:'+authenticationType);
+      if (!adapter) {
+        adapter = container.lookup('torii-adapter:application');
+      }
+      return adapter;
+    }
+
+    var Session = Ember.ObjectProxy.extend({
+      state: null,
+
+      stateMachine: function(){
+        return createStateMachine(this);
+      }.property(),
+
+      setupStateProxy: function(){
+        var sm    = this.get('stateMachine'),
+            proxy = this;
+        sm.on('didTransition', function(){
+          proxy.set('content', sm.state);
+          proxy.set('currentStateName', sm.currentStateName);
+        });
+      }.on('init'),
+
+      // Make these properties one-way.
+      setUnknownProperty: Ember.K,
+
+      open: function(provider, options){
+        var container = this.container,
+            torii     = this.get('torii'),
+            sm        = this.get('stateMachine');
+
+        return new Ember.RSVP.Promise(function(resolve){
+          sm.send('startOpen');
+          resolve();
+        }).then(function(){
+          return torii.open(provider, options);
+        }).then(function(authorization){
+          var adapter = lookupAdapter(
+            container, provider
+          );
+
+          return adapter.open(authorization);
+        }).then(function(user){
+          sm.send('finishOpen', user);
+          return user;
+        })["catch"](function(error){
+          sm.send('failOpen', error);
+          return Ember.RSVP.reject(error);
+        });
+      },
+
+      fetch: function(provider, options){
+        var container = this.container,
+            sm        = this.get('stateMachine');
+
+        return new Ember.RSVP.Promise(function(resolve){
+          sm.send('startFetch');
+          resolve();
+        }).then(function(){
+          var adapter = lookupAdapter(
+            container, provider
+          );
+
+          return adapter.fetch(options);
+        }).then(function(data){
+          sm.send('finishFetch', data);
+          return;
+        })["catch"](function(error){
+          sm.send('failFetch', error);
+          return Ember.RSVP.reject(error);
+        });
+      },
+
+      close: function(provider, options){
+        var container = this.container,
+            sm        = this.get('stateMachine');
+
+        return new Ember.RSVP.Promise(function(resolve){
+          sm.send('startClose');
+          resolve();
+        }).then(function(){
+          var adapter = lookupAdapter(container, provider);
+          return adapter.close(options);
+        }).then(function(){
+          sm.send('finishClose');
+        })["catch"](function(error){
+          sm.send('failClose', error);
+          return Ember.RSVP.reject(error);
+        });
+      }
+
+    });
+
+    __exports__["default"] = Session;
+  });
+define("torii/session/state-machine", 
+  ["torii/lib/state-machine","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var StateMachine = __dependency1__["default"];
+
+    var transitionTo = StateMachine.transitionTo;
+
+    function copyProperties(data, target) {
+      for (var key in data) {
+        if (data.hasOwnProperty(key)) {
+          target[key] = data[key];
+        }
+      }
+    }
+
+    function transitionToClearing(target, propertiesToClear) {
+      return function(){
+        for (var i;i<propertiesToClear.length;i++) {
+          this[propertiesToClear[i]] = null;
+        }
+        this.transitionTo(target);
+      };
+    }
+
+    __exports__["default"] = function(session){
+      var sm = new StateMachine({
+        initialState: 'unauthenticated',
+
+        states: {
+          unauthenticated: {
+            errorMessage: null,
+            isAuthenticated: false,
+            // Actions
+            startOpen: transitionToClearing('opening', ['errorMessage']),
+            startFetch: transitionToClearing('fetching', ['errorMessage'])
+          },
+          authenticated: {
+            // Properties
+            currentUser: null,
+            isAuthenticated: true,
+            startClose: transitionTo('closing')
+          },
+          opening: {
+            isWorking: true,
+            isOpening: true,
+            // Actions
+            finishOpen: function(data){
+              copyProperties(data, this.states['authenticated']);
+              this.transitionTo('authenticated');
+            },
+            failOpen: function(errorMessage){
+              this.states['unauthenticated'].errorMessage = errorMessage;
+              this.transitionTo('unauthenticated');
+            }
+          },
+          fetching: {
+            isWorking: true,
+            isFetching: true,
+            // Actions
+            finishFetch: function(data){
+              copyProperties(data, this.states['authenticated']);
+              this.transitionTo('authenticated');
+            },
+            failFetch: function(errorMessage){
+              this.states['unauthenticated'].errorMessage = errorMessage;
+              this.transitionTo('unauthenticated');
+            }
+          },
+          closing: {
+            isWorking: true,
+            isClosing: true,
+            isAuthenticated: true,
+            // Actions
+            finishClose: function(){
+              this.transitionTo('unauthenticated');
+            },
+            failClose: function(errorMessage){
+              this.states['unauthenticated'].errorMessage = errorMessage;
+              this.transitionTo('unauthenticated');
+            }
+          }
+        }
+      });
+      sm.session = session;
+      return sm;
+    }
+  });
+define("torii/torii", 
+  ["exports"],
+  function(__exports__) {
+    "use strict";
+    function lookupProvider(container, providerName){
+      return container.lookup('torii-provider:'+providerName);
+    }
+
+    function proxyToProvider(methodName, requireMethod){
+      return function(providerName, options){
+        var container = this.container;
+        var provider = lookupProvider(container, providerName);
+        if (!provider) {
+          throw new Error("Expected a provider named '"+providerName+"' " +
+                          ", did you forget to register it?");
+        }
+
+        if (!provider[methodName]) {
+          if (requireMethod) {
+            throw new Error("Expected provider '"+providerName+"' to define " +
+                            "the '"+methodName+"' method.");
+          } else {
+            return Ember.RSVP.Promise.resolve({});
+          }
+        }
+        return new Ember.RSVP.Promise(function(resolve, reject){
+          resolve( provider[methodName](options) );
+        });
+      };
+    }
+
+    /**
+     * Torii is an engine for authenticating against various
+     * providers. For example, you can open a session with
+     * Linked In via Oauth2 and authorization codes by doing
+     * the following:
+     *
+     *     Torii.open('linked-in-oauth2').then(function(authData){
+     *       console.log(authData.authorizationCode);
+     *     });
+     *
+     * For traditional authentication flows, you will often use
+     * Torii via the Torii.Session API.
+     *
+     * @class Torii
+     */
+    var Torii = Ember.Object.extend({
+
+      /**
+       * Open an authorization against an API. A promise resolving
+       * with an authentication response object is returned. These
+       * response objects,  are found in the "torii/authentications"
+       * namespace.
+       *
+       * @method open
+       * @param {String} providerName The provider to open
+       * @return {Ember.RSVP.Promise} Promise resolving to an authentication object
+       */
+      open:  proxyToProvider('open', true),
+
+      /**
+       * Return a promise which will resolve if the provider has
+       * already been opened.
+       *
+       * @method fetch
+       * @param {String} providerName The provider to open
+       * @return {Ember.RSVP.Promise} Promise resolving to an authentication object
+       */
+      fetch:  proxyToProvider('fetch'),
+
+      /**
+       * Return a promise which will resolve when the provider has been
+       * closed. Closing a provider may not always be a meaningful action,
+       * and may be better handled by torii's session management instead.
+       *
+       * @method close
+       * @param {String} providerName The provider to open
+       * @return {Ember.RSVP.Promise} Promise resolving when the provider is closed
+       */
+      close:  proxyToProvider('close')
+    });
+
+    __exports__["default"] = Torii;
+  });
+;(function(global) {
+  var define = global.define;
+  var require = global.require;
+  var Ember = global.Ember;
+  if (typeof Ember === 'undefined' && typeof require !== 'undefined') {
+    Ember = require('ember');
+  }
+
+Ember.libraries.register('Ember Simple Auth Torii', '0.7.3');
+
+define("simple-auth-torii/authenticators/torii", 
+  ["simple-auth/authenticators/base","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Base = __dependency1__["default"];
+
+    /**
+      Authenticator that wraps the
+      [Torii library](https://github.com/Vestorly/torii).
+
+      _The factory for this authenticator is registered as
+      `'simple-auth-authenticator:torii'` in Ember's container._
+
+      @class Torii
+      @namespace SimpleAuth.Authenticators
+      @module simple-auth-torii/authenticators/torii
+      @extends Base
+    */
+    __exports__["default"] = Base.extend({
+      /**
+        @property torii
+        @private
+      */
+      torii: null,
+
+      /**
+        @property provider
+        @private
+      */
+      provider: null,
+
+      /**
+        Restores the session by calling the torii provider's `fetch` method.
+
+        @method restore
+        @param {Object} data The data to restore the session from
+        @return {Ember.RSVP.Promise} A promise that when it resolves results in the session being authenticated
+      */
+      restore: function(data) {
+        var _this = this;
+        data      = data || {};
+        return new Ember.RSVP.Promise(function(resolve, reject) {
+          if (!Ember.isEmpty(data.provider)) {
+            var provider = data.provider;
+            _this.torii.fetch(data.provider, data).then(function(data) {
+              _this.resolveWith(provider, data, resolve);
+            }, function() {
+              delete _this.provider;
+              reject();
+            });
+          } else {
+            delete _this.provider;
+            reject();
+          }
+        });
+      },
+
+      /**
+        Authenticates the session by opening the torii provider. For more
+        documentation on torii, see the
+        [project's README](https://github.com/Vestorly/torii#readme).
+
+        @method authenticate
+        @param {String} provider The provider to authenticate the session with
+        @param {Object} options The options to pass to the torii provider
+        @return {Ember.RSVP.Promise} A promise that resolves when the provider successfully authenticates a user and rejects otherwise
+      */
+      authenticate: function(provider, options) {
+        var _this = this;
+        return new Ember.RSVP.Promise(function(resolve, reject) {
+          _this.torii.open(provider, options || {}).then(function(data) {
+            _this.resolveWith(provider, data, resolve);
+          }, reject);
+        });
+      },
+
+      /**
+        Closes the torii provider.
+
+        @method invalidate
+        @param {Object} data The data that's stored in the session
+        @return {Ember.RSVP.Promise} A promise that resolves when the provider successfully closes and rejects otherwise
+      */
+      invalidate: function(data) {
+        var _this = this;
+        return new Ember.RSVP.Promise(function(resolve, reject) {
+          _this.torii.close(_this.provider).then(function() {
+            delete _this.provider;
+            resolve();
+          }, reject);
+        });
+      },
+
+      /**
+        @method resolveWith
+        @private
+      */
+      resolveWith: function(provider, data, resolve) {
+        data.provider = provider;
+        this.provider = data.provider;
+        resolve(data);
+      }
+
+    });
+  });
+define("simple-auth-torii/ember", 
+  ["./initializer"],
+  function(__dependency1__) {
+    "use strict";
+    var initializer = __dependency1__["default"];
+
+    Ember.onLoad('Ember.Application', function(Application) {
+      Application.initializer(initializer);
+    });
+  });
+define("simple-auth-torii/initializer", 
+  ["simple-auth-torii/authenticators/torii","exports"],
+  function(__dependency1__, __exports__) {
+    "use strict";
+    var Authenticator = __dependency1__["default"];
+
+    __exports__["default"] = {
+      name:   'simple-auth-torii',
+      before: 'simple-auth',
+      after:  'torii',
+      initialize: function(container, application) {
+        var torii         = container.lookup('torii:main');
+        var authenticator = Authenticator.create({ torii: torii });
+        container.register('simple-auth-authenticator:torii', authenticator, { instantiate: false });
+      }
+    };
+  });
+})(this);
 
 ;(function() {
     "use strict";
@@ -82959,15 +84812,15 @@ define("simple-auth/utils/load-config",
 
   DS.LSSerializer = DS.JSONSerializer.extend({
 
-    serializeHasMany: function(record, json, relationship) {
+    serializeHasMany: function(snapshot, json, relationship) {
       var key = relationship.key;
       var payloadKey = this.keyForRelationship ? this.keyForRelationship(key, "hasMany") : key;
-      var relationshipType = record.constructor.determineRelationshipType(relationship);
+      var relationshipType = snapshot.type.determineRelationshipType(relationship);
 
       if (relationshipType === 'manyToNone' ||
           relationshipType === 'manyToMany' ||
           relationshipType === 'manyToOne') {
-        json[payloadKey] = record.get(key).mapBy('id');
+        json[payloadKey] = snapshot.hasMany(key).mapBy('id');
         // TODO support for polymorphic manyToNone and manyToMany relationships
       }
     },
@@ -83179,7 +85032,9 @@ define("simple-auth/utils/load-config",
 
     createRecord: function (store, type, record) {
       var namespaceRecords = this._namespaceForType(type);
-      var recordHash = record.serialize({includeId: true});
+      var serializer = store.serializerFor(type.typeKey);
+      var snapshot = record._createSnapshot();
+      var recordHash = serializer.serialize(snapshot, {includeId: true});
 
       namespaceRecords.records[recordHash.id] = recordHash;
 
@@ -83190,8 +85045,10 @@ define("simple-auth/utils/load-config",
     updateRecord: function (store, type, record) {
       var namespaceRecords = this._namespaceForType(type);
       var id = record.get('id');
+      var serializer = store.serializerFor(type.typeKey);
+      var snapshot = record._createSnapshot();
 
-      namespaceRecords.records[id] = record.serialize({ includeId: true });
+      namespaceRecords.records[id] = serializer.serialize(snapshot, {includeId: true});
 
       this.persistData(type, namespaceRecords);
       return Ember.RSVP.resolve();
@@ -98693,34 +100550,150 @@ if (typeof jQuery === 'undefined') {
 
 (function(){var t=[].slice;!function(e,s){"use strict";var o;return o=function(){function t(t,s){null==s&&(s={}),this.$element=e(t),this.options=e.extend({},e.fn.bootstrapSwitch.defaults,{state:this.$element.is(":checked"),size:this.$element.data("size"),animate:this.$element.data("animate"),disabled:this.$element.is(":disabled"),readonly:this.$element.is("[readonly]"),indeterminate:this.$element.data("indeterminate"),inverse:this.$element.data("inverse"),radioAllOff:this.$element.data("radio-all-off"),onColor:this.$element.data("on-color"),offColor:this.$element.data("off-color"),onText:this.$element.data("on-text"),offText:this.$element.data("off-text"),labelText:this.$element.data("label-text"),baseClass:this.$element.data("base-class"),wrapperClass:this.$element.data("wrapper-class")},s),this.$wrapper=e("<div>",{"class":function(t){return function(){var e;return e=[""+t.options.baseClass].concat(t._getClasses(t.options.wrapperClass)),e.push(t.options.state?""+t.options.baseClass+"-on":""+t.options.baseClass+"-off"),null!=t.options.size&&e.push(""+t.options.baseClass+"-"+t.options.size),t.options.animate&&e.push(""+t.options.baseClass+"-animate"),t.options.disabled&&e.push(""+t.options.baseClass+"-disabled"),t.options.readonly&&e.push(""+t.options.baseClass+"-readonly"),t.options.indeterminate&&e.push(""+t.options.baseClass+"-indeterminate"),t.options.inverse&&e.push(""+t.options.baseClass+"-inverse"),t.$element.attr("id")&&e.push(""+t.options.baseClass+"-id-"+t.$element.attr("id")),e.join(" ")}}(this)()}),this.$container=e("<div>",{"class":""+this.options.baseClass+"-container"}),this.$on=e("<span>",{html:this.options.onText,"class":""+this.options.baseClass+"-handle-on "+this.options.baseClass+"-"+this.options.onColor}),this.$off=e("<span>",{html:this.options.offText,"class":""+this.options.baseClass+"-handle-off "+this.options.baseClass+"-"+this.options.offColor}),this.$label=e("<label>",{html:this.options.labelText,"class":""+this.options.baseClass+"-label"}),this.options.indeterminate&&this.$element.prop("indeterminate",!0),this.$element.on("init.bootstrapSwitch",function(e){return function(){return e.options.onInit.apply(t,arguments)}}(this)),this.$element.on("switchChange.bootstrapSwitch",function(e){return function(){return e.options.onSwitchChange.apply(t,arguments)}}(this)),this.$container=this.$element.wrap(this.$container).parent(),this.$wrapper=this.$container.wrap(this.$wrapper).parent(),this.$element.before(this.options.inverse?this.$off:this.$on).before(this.$label).before(this.options.inverse?this.$on:this.$off).trigger("init.bootstrapSwitch"),this._elementHandlers(),this._handleHandlers(),this._labelHandlers(),this._formHandler()}return t.prototype._constructor=t,t.prototype.state=function(t,e){return"undefined"==typeof t?this.options.state:this.options.disabled||this.options.readonly?this.$element:this.options.state&&!this.options.radioAllOff&&this.$element.is(":radio")?this.$element:(this.options.indeterminate?(this.indeterminate(!1),t=!0):t=!!t,this.$element.prop("checked",t).trigger("change.bootstrapSwitch",e),this.$element)},t.prototype.toggleState=function(t){return this.options.disabled||this.options.readonly?this.$element:this.options.indeterminate?(this.indeterminate(!1),this.state(!0)):this.$element.prop("checked",!this.options.state).trigger("change.bootstrapSwitch",t)},t.prototype.size=function(t){return"undefined"==typeof t?this.options.size:(null!=this.options.size&&this.$wrapper.removeClass(""+this.options.baseClass+"-"+this.options.size),t&&this.$wrapper.addClass(""+this.options.baseClass+"-"+t),this.options.size=t,this.$element)},t.prototype.animate=function(t){return"undefined"==typeof t?this.options.animate:(t=!!t,this.$wrapper[t?"addClass":"removeClass"](""+this.options.baseClass+"-animate"),this.options.animate=t,this.$element)},t.prototype.toggleAnimate=function(){return this.$wrapper.toggleClass(""+this.options.baseClass+"-animate"),this.options.animate=!this.options.animate,this.$element},t.prototype.disabled=function(t){return"undefined"==typeof t?this.options.disabled:(t=!!t,this.$wrapper[t?"addClass":"removeClass"](""+this.options.baseClass+"-disabled"),this.$element.prop("disabled",t),this.options.disabled=t,this.$element)},t.prototype.toggleDisabled=function(){return this.$element.prop("disabled",!this.options.disabled),this.$wrapper.toggleClass(""+this.options.baseClass+"-disabled"),this.options.disabled=!this.options.disabled,this.$element},t.prototype.readonly=function(t){return"undefined"==typeof t?this.options.readonly:(t=!!t,this.$wrapper[t?"addClass":"removeClass"](""+this.options.baseClass+"-readonly"),this.$element.prop("readonly",t),this.options.readonly=t,this.$element)},t.prototype.toggleReadonly=function(){return this.$element.prop("readonly",!this.options.readonly),this.$wrapper.toggleClass(""+this.options.baseClass+"-readonly"),this.options.readonly=!this.options.readonly,this.$element},t.prototype.indeterminate=function(t){return"undefined"==typeof t?this.options.indeterminate:(t=!!t,this.$wrapper[t?"addClass":"removeClass"](""+this.options.baseClass+"-indeterminate"),this.$element.prop("indeterminate",t),this.options.indeterminate=t,this.$element)},t.prototype.toggleIndeterminate=function(){return this.$element.prop("indeterminate",!this.options.indeterminate),this.$wrapper.toggleClass(""+this.options.baseClass+"-indeterminate"),this.options.indeterminate=!this.options.indeterminate,this.$element},t.prototype.inverse=function(t){var e,s;return"undefined"==typeof t?this.options.inverse:(t=!!t,this.$wrapper[t?"addClass":"removeClass"](""+this.options.baseClass+"-inverse"),s=this.$on.clone(!0),e=this.$off.clone(!0),this.$on.replaceWith(e),this.$off.replaceWith(s),this.$on=e,this.$off=s,this.options.inverse=t,this.$element)},t.prototype.toggleInverse=function(){var t,e;return this.$wrapper.toggleClass(""+this.options.baseClass+"-inverse"),e=this.$on.clone(!0),t=this.$off.clone(!0),this.$on.replaceWith(t),this.$off.replaceWith(e),this.$on=t,this.$off=e,this.options.inverse=!this.options.inverse,this.$element},t.prototype.onColor=function(t){var e;return e=this.options.onColor,"undefined"==typeof t?e:(null!=e&&this.$on.removeClass(""+this.options.baseClass+"-"+e),this.$on.addClass(""+this.options.baseClass+"-"+t),this.options.onColor=t,this.$element)},t.prototype.offColor=function(t){var e;return e=this.options.offColor,"undefined"==typeof t?e:(null!=e&&this.$off.removeClass(""+this.options.baseClass+"-"+e),this.$off.addClass(""+this.options.baseClass+"-"+t),this.options.offColor=t,this.$element)},t.prototype.onText=function(t){return"undefined"==typeof t?this.options.onText:(this.$on.html(t),this.options.onText=t,this.$element)},t.prototype.offText=function(t){return"undefined"==typeof t?this.options.offText:(this.$off.html(t),this.options.offText=t,this.$element)},t.prototype.labelText=function(t){return"undefined"==typeof t?this.options.labelText:(this.$label.html(t),this.options.labelText=t,this.$element)},t.prototype.baseClass=function(){return this.options.baseClass},t.prototype.wrapperClass=function(t){return"undefined"==typeof t?this.options.wrapperClass:(t||(t=e.fn.bootstrapSwitch.defaults.wrapperClass),this.$wrapper.removeClass(this._getClasses(this.options.wrapperClass).join(" ")),this.$wrapper.addClass(this._getClasses(t).join(" ")),this.options.wrapperClass=t,this.$element)},t.prototype.radioAllOff=function(t){return"undefined"==typeof t?this.options.radioAllOff:(this.options.radioAllOff=t,this.$element)},t.prototype.onInit=function(t){return"undefined"==typeof t?this.options.onInit:(t||(t=e.fn.bootstrapSwitch.defaults.onInit),this.options.onInit=t,this.$element)},t.prototype.onSwitchChange=function(t){return"undefined"==typeof t?this.options.onSwitchChange:(t||(t=e.fn.bootstrapSwitch.defaults.onSwitchChange),this.options.onSwitchChange=t,this.$element)},t.prototype.destroy=function(){var t;return t=this.$element.closest("form"),t.length&&t.off("reset.bootstrapSwitch").removeData("bootstrap-switch"),this.$container.children().not(this.$element).remove(),this.$element.unwrap().unwrap().off(".bootstrapSwitch").removeData("bootstrap-switch"),this.$element},t.prototype._elementHandlers=function(){return this.$element.on({"change.bootstrapSwitch":function(t){return function(s,o){var i;return s.preventDefault(),s.stopImmediatePropagation(),i=t.$element.is(":checked"),i!==t.options.state?(t.options.state=i,t.$wrapper.removeClass(i?""+t.options.baseClass+"-off":""+t.options.baseClass+"-on").addClass(i?""+t.options.baseClass+"-on":""+t.options.baseClass+"-off"),o?void 0:(t.$element.is(":radio")&&e("[name='"+t.$element.attr("name")+"']").not(t.$element).prop("checked",!1).trigger("change.bootstrapSwitch",!0),t.$element.trigger("switchChange.bootstrapSwitch",[i]))):void 0}}(this),"focus.bootstrapSwitch":function(t){return function(e){return e.preventDefault(),t.$wrapper.addClass(""+t.options.baseClass+"-focused")}}(this),"blur.bootstrapSwitch":function(t){return function(e){return e.preventDefault(),t.$wrapper.removeClass(""+t.options.baseClass+"-focused")}}(this),"keydown.bootstrapSwitch":function(t){return function(e){if(e.which&&!t.options.disabled&&!t.options.readonly)switch(e.which){case 37:return e.preventDefault(),e.stopImmediatePropagation(),t.state(!1);case 39:return e.preventDefault(),e.stopImmediatePropagation(),t.state(!0)}}}(this)})},t.prototype._handleHandlers=function(){return this.$on.on("click.bootstrapSwitch",function(t){return function(){return t.state(!1),t.$element.trigger("focus.bootstrapSwitch")}}(this)),this.$off.on("click.bootstrapSwitch",function(t){return function(){return t.state(!0),t.$element.trigger("focus.bootstrapSwitch")}}(this))},t.prototype._labelHandlers=function(){return this.$label.on({"mousemove.bootstrapSwitch touchmove.bootstrapSwitch":function(t){return function(e){var s,o,i,n;if(t.isLabelDragging)return e.preventDefault(),t.isLabelDragged=!0,o=e.pageX||e.originalEvent.touches[0].pageX,i=(o-t.$wrapper.offset().left)/t.$wrapper.width()*100,s=25,n=75,t.options.animate&&t.$wrapper.removeClass(""+t.options.baseClass+"-animate"),s>i?i=s:i>n&&(i=n),t.$container.css("margin-left",""+(i-n)+"%"),t.$element.trigger("focus.bootstrapSwitch")}}(this),"mousedown.bootstrapSwitch touchstart.bootstrapSwitch":function(t){return function(e){return t.isLabelDragging||t.options.disabled||t.options.readonly?void 0:(e.preventDefault(),t.isLabelDragging=!0,t.$element.trigger("focus.bootstrapSwitch"))}}(this),"mouseup.bootstrapSwitch touchend.bootstrapSwitch":function(t){return function(e){var s;if(t.isLabelDragging)return e.preventDefault(),t.isLabelDragged?(s=parseInt(t.$container.css("margin-left"),10)>-(t.$container.width()/6),t.isLabelDragged=!1,t.state(t.options.inverse?!s:s),t.options.animate&&t.$wrapper.addClass(""+t.options.baseClass+"-animate"),t.$container.css("margin-left","")):t.state(!t.options.state),t.isLabelDragging=!1}}(this),"mouseleave.bootstrapSwitch":function(t){return function(){return t.$label.trigger("mouseup.bootstrapSwitch")}}(this)})},t.prototype._formHandler=function(){var t;return t=this.$element.closest("form"),t.data("bootstrap-switch")?void 0:t.on("reset.bootstrapSwitch",function(){return s.setTimeout(function(){return t.find("input").filter(function(){return e(this).data("bootstrap-switch")}).each(function(){return e(this).bootstrapSwitch("state",this.checked)})},1)}).data("bootstrap-switch",!0)},t.prototype._getClasses=function(t){var s,o,i,n;if(!e.isArray(t))return[""+this.options.baseClass+"-"+t];for(o=[],i=0,n=t.length;n>i;i++)s=t[i],o.push(""+this.options.baseClass+"-"+s);return o},t}(),e.fn.bootstrapSwitch=function(){var s,i,n;return i=arguments[0],s=2<=arguments.length?t.call(arguments,1):[],n=this,this.each(function(){var t,a;return t=e(this),a=t.data("bootstrap-switch"),a||t.data("bootstrap-switch",a=new o(this,i)),"string"==typeof i?n=a[i].apply(a,s):void 0}),n},e.fn.bootstrapSwitch.Constructor=o,e.fn.bootstrapSwitch.defaults={state:!0,size:null,animate:!0,disabled:!1,readonly:!1,indeterminate:!1,inverse:!1,radioAllOff:!1,onColor:"primary",offColor:"default",onText:"ON",offText:"OFF",labelText:"&nbsp;",baseClass:"bootstrap-switch",wrapperClass:"wrapper",onInit:function(){},onSwitchChange:function(){}}}(window.jQuery,window)}).call(this);
 ;/*!
- * Bootstrap-select v1.6.3 (http://silviomoreto.github.io/bootstrap-select/)
+ * Bootstrap-select v1.6.4 (http://silviomoreto.github.io/bootstrap-select)
  *
- * Copyright 2013-2014 bootstrap-select
+ * Copyright 2013-2015 bootstrap-select
  * Licensed under MIT (https://github.com/silviomoreto/bootstrap-select/blob/master/LICENSE)
  */
 (function ($) {
   'use strict';
 
-  // Case insensitive search
-  $.expr[':'].icontains = function (obj, index, meta) {
-    return icontains($(obj).text(), meta[3]);
-  };
-
-  // Case and accent insensitive search
-  $.expr[':'].aicontains = function (obj, index, meta) {
-    return icontains($(obj).data('normalizedText') || $(obj).text(), meta[3]);
-  };
-
-  /**
-   * Actual implementation of the case insensitive search.
-   * @access private
-   * @param {String} haystack
-   * @param {String} needle
-   * @returns {boolean}
-   */
-  function icontains(haystack, needle) {
-    return haystack.toUpperCase().indexOf(needle.toUpperCase()) > -1;
+  //<editor-fold desc="Shims">
+  if (!String.prototype.includes) {
+    (function () {
+      'use strict'; // needed to support `apply`/`call` with `undefined`/`null`
+      var toString = {}.toString;
+      var defineProperty = (function () {
+        // IE 8 only supports `Object.defineProperty` on DOM elements
+        try {
+          var object = {};
+          var $defineProperty = Object.defineProperty;
+          var result = $defineProperty(object, object, object) && $defineProperty;
+        } catch (error) {
+        }
+        return result;
+      }());
+      var indexOf = ''.indexOf;
+      var includes = function (search) {
+        if (this == null) {
+          throw TypeError();
+        }
+        var string = String(this);
+        if (search && toString.call(search) == '[object RegExp]') {
+          throw TypeError();
+        }
+        var stringLength = string.length;
+        var searchString = String(search);
+        var searchLength = searchString.length;
+        var position = arguments.length > 1 ? arguments[1] : undefined;
+        // `ToInteger`
+        var pos = position ? Number(position) : 0;
+        if (pos != pos) { // better `isNaN`
+          pos = 0;
+        }
+        var start = Math.min(Math.max(pos, 0), stringLength);
+        // Avoid the `indexOf` call if no match is possible
+        if (searchLength + start > stringLength) {
+          return false;
+        }
+        return indexOf.call(string, searchString, pos) != -1;
+      };
+      if (defineProperty) {
+        defineProperty(String.prototype, 'includes', {
+          'value': includes,
+          'configurable': true,
+          'writable': true
+        });
+      } else {
+        String.prototype.includes = includes;
+      }
+    }());
   }
+
+  if (!String.prototype.startsWith) {
+    (function () {
+      'use strict'; // needed to support `apply`/`call` with `undefined`/`null`
+      var defineProperty = (function () {
+        // IE 8 only supports `Object.defineProperty` on DOM elements
+        try {
+          var object = {};
+          var $defineProperty = Object.defineProperty;
+          var result = $defineProperty(object, object, object) && $defineProperty;
+        } catch (error) {
+        }
+        return result;
+      }());
+      var toString = {}.toString;
+      var startsWith = function (search) {
+        if (this == null) {
+          throw TypeError();
+        }
+        var string = String(this);
+        if (search && toString.call(search) == '[object RegExp]') {
+          throw TypeError();
+        }
+        var stringLength = string.length;
+        var searchString = String(search);
+        var searchLength = searchString.length;
+        var position = arguments.length > 1 ? arguments[1] : undefined;
+        // `ToInteger`
+        var pos = position ? Number(position) : 0;
+        if (pos != pos) { // better `isNaN`
+          pos = 0;
+        }
+        var start = Math.min(Math.max(pos, 0), stringLength);
+        // Avoid the `indexOf` call if no match is possible
+        if (searchLength + start > stringLength) {
+          return false;
+        }
+        var index = -1;
+        while (++index < searchLength) {
+          if (string.charCodeAt(start + index) != searchString.charCodeAt(index)) {
+            return false;
+          }
+        }
+        return true;
+      };
+      if (defineProperty) {
+        defineProperty(String.prototype, 'startsWith', {
+          'value': startsWith,
+          'configurable': true,
+          'writable': true
+        });
+      } else {
+        String.prototype.startsWith = startsWith;
+      }
+    }());
+  }
+  //</editor-fold>
+
+  // Case insensitive contains search
+  $.expr[':'].icontains = function (obj, index, meta) {
+    var $obj = $(obj);
+    var haystack = ($obj.data('tokens') || $obj.text()).toUpperCase();
+    return haystack.includes(meta[3].toUpperCase());
+  };
+
+  // Case insensitive begins search
+  $.expr[':'].ibegins = function (obj, index, meta) {
+    var $obj = $(obj);
+    var haystack = ($obj.data('tokens') || $obj.text()).toUpperCase();
+    return haystack.startsWith(meta[3].toUpperCase());
+  };
+
+  // Case and accent insensitive contains search
+  $.expr[':'].aicontains = function (obj, index, meta) {
+    var $obj = $(obj);
+    var haystack = ($obj.data('tokens') || $obj.data('normalizedText') || $obj.text()).toUpperCase();
+    return haystack.includes(haystack, meta[3]);
+  };
+
+  // Case and accent insensitive begins search
+  $.expr[':'].aibegins = function (obj, index, meta) {
+    var $obj = $(obj);
+    var haystack = ($obj.data('tokens') || $obj.data('normalizedText') || $obj.text()).toUpperCase();
+    return haystack.startsWith(meta[3].toUpperCase());
+  };
 
   /**
    * Remove all diatrics from the given text.
@@ -98803,25 +100776,25 @@ if (typeof jQuery === 'undefined') {
     this.init();
   };
 
-  Selectpicker.VERSION = '1.6.3';
+  Selectpicker.VERSION = '1.6.4';
 
   // part of this is duplicated in i18n/defaults-en_US.js. Make sure to update both.
   Selectpicker.DEFAULTS = {
     noneSelectedText: 'Nothing selected',
-    noneResultsText: 'No results match',
+    noneResultsText: 'No results matched {0}',
     countSelectedText: function (numSelected, numTotal) {
       return (numSelected == 1) ? "{0} item selected" : "{0} items selected";
     },
     maxOptionsText: function (numAll, numGroup) {
-      var arr = [];
-
-      arr[0] = (numAll == 1) ? 'Limit reached ({n} item max)' : 'Limit reached ({n} items max)';
-      arr[1] = (numGroup == 1) ? 'Group limit reached ({n} item max)' : 'Group limit reached ({n} items max)';
-
-      return arr;
+      return [
+        (numAll == 1) ? 'Limit reached ({n} item max)' : 'Limit reached ({n} items max)',
+        (numGroup == 1) ? 'Group limit reached ({n} item max)' : 'Group limit reached ({n} items max)'
+      ];
     },
     selectAllText: 'Select All',
     deselectAllText: 'Deselect All',
+    doneButton: false,
+    doneButtonText: 'Close',
     multipleSeparator: ', ',
     style: 'btn-default',
     size: 'auto',
@@ -98836,14 +100809,16 @@ if (typeof jQuery === 'undefined') {
     dropupAuto: true,
     header: false,
     liveSearch: false,
+    liveSearchPlaceholder: null,
+    liveSearchNormalize: false,
+    liveSearchStyle: 'contains',
     actionsBox: false,
     iconBase: 'glyphicon',
     tickIcon: 'glyphicon-ok',
     maxOptions: false,
     mobile: false,
     selectOnTab: false,
-    dropdownAlignRight: false,
-    searchAccentInsensitive: false
+    dropdownAlignRight: false
   };
 
   Selectpicker.prototype = {
@@ -98859,8 +100834,8 @@ if (typeof jQuery === 'undefined') {
       this.autofocus = this.$element.prop('autofocus');
       this.$newElement = this.createView();
       this.$element.after(this.$newElement);
-      this.$menu = this.$newElement.find('> .dropdown-menu');
-      this.$button = this.$newElement.find('> button');
+      this.$menu = this.$newElement.children('.dropdown-menu');
+      this.$button = this.$newElement.children('button');
       this.$searchbox = this.$newElement.find('input');
 
       if (this.options.dropdownAlignRight)
@@ -98892,24 +100867,39 @@ if (typeof jQuery === 'undefined') {
       // If we are multiple, then add the show-tick class by default
       var multiple = this.multiple ? ' show-tick' : '',
           inputGroup = this.$element.parent().hasClass('input-group') ? ' input-group-btn' : '',
-          autofocus = this.autofocus ? ' autofocus' : '',
-          btnSize = this.$element.parents().hasClass('form-group-lg') ? ' btn-lg' : (this.$element.parents().hasClass('form-group-sm') ? ' btn-sm' : '');
+          autofocus = this.autofocus ? ' autofocus' : '';
       // Elements
       var header = this.options.header ? '<div class="popover-title"><button type="button" class="close" aria-hidden="true">&times;</button>' + this.options.header + '</div>' : '';
-      var searchbox = this.options.liveSearch ? '<div class="bs-searchbox"><input type="text" class="input-block-level form-control" autocomplete="off" /></div>' : '';
-      var actionsbox = this.options.actionsBox ? '<div class="bs-actionsbox">' +
-      '<div class="btn-group btn-block">' +
-      '<button class="actions-btn bs-select-all btn btn-sm btn-default">' +
+      var searchbox = this.options.liveSearch ?
+      '<div class="bs-searchbox">' +
+      '<input type="text" class="form-control" autocomplete="off"' +
+      (null === this.options.liveSearchPlaceholder ? '' : ' placeholder="' + htmlEscape(this.options.liveSearchPlaceholder) + '"') + '>' +
+      '</div>'
+          : '';
+      var actionsbox = this.multiple && this.options.actionsBox ?
+      '<div class="bs-actionsbox">' +
+      '<div class="btn-group btn-group-sm btn-block">' +
+      '<button class="actions-btn bs-select-all btn btn-default">' +
       this.options.selectAllText +
       '</button>' +
-      '<button class="actions-btn bs-deselect-all btn btn-sm btn-default">' +
+      '<button class="actions-btn bs-deselect-all btn btn-default">' +
       this.options.deselectAllText +
       '</button>' +
       '</div>' +
-      '</div>' : '';
+      '</div>'
+          : '';
+      var donebutton = this.multiple && this.options.doneButton ?
+      '<div class="bs-donebutton">' +
+      '<div class="btn-group btn-block">' +
+      '<button class="btn btn-sm btn-default">' +
+      this.options.doneButtonText +
+      '</button>' +
+      '</div>' +
+      '</div>'
+          : '';
       var drop =
           '<div class="btn-group bootstrap-select' + multiple + inputGroup + '">' +
-          '<button type="button" class="btn dropdown-toggle selectpicker' + btnSize + '" data-toggle="dropdown"' + autofocus + '>' +
+          '<button type="button" class="btn dropdown-toggle form-control selectpicker" data-toggle="dropdown"' + autofocus + '>' +
           '<span class="filter-option pull-left"></span>&nbsp;' +
           '<span class="caret"></span>' +
           '</button>' +
@@ -98919,6 +100909,7 @@ if (typeof jQuery === 'undefined') {
           actionsbox +
           '<ul class="dropdown-menu inner selectpicker" role="menu">' +
           '</ul>' +
+          donebutton +
           '</div>' +
           '</div>';
 
@@ -98954,45 +100945,46 @@ if (typeof jQuery === 'undefined') {
        * @param content
        * @param [index]
        * @param [classes]
+       * @param [optgroup]
        * @returns {string}
        */
-      var generateLI = function (content, index, classes) {
+      var generateLI = function (content, index, classes, optgroup) {
         return '<li' +
-        (typeof classes !== 'undefined' ? ' class="' + classes + '"' : '') +
-        (typeof index !== 'undefined' | null === index ? ' data-original-index="' + index + '"' : '') +
-        '>' + content + '</li>';
+            ((typeof classes !== 'undefined' & '' !== classes) ? ' class="' + classes + '"' : '') +
+            ((typeof index !== 'undefined' & null !== index) ? ' data-original-index="' + index + '"' : '') +
+            ((typeof optgroup !== 'undefined' & null !== optgroup) ? 'data-optgroup="' + optgroup + '"' : '') +
+            '>' + content + '</li>';
       };
 
       /**
        * @param text
        * @param [classes]
        * @param [inline]
-       * @param [optgroup]
+       * @param [tokens]
        * @returns {string}
        */
-      var generateA = function (text, classes, inline, optgroup) {
-        var normText = normalizeToBase(htmlEscape(text));
+      var generateA = function (text, classes, inline, tokens) {
         return '<a tabindex="0"' +
-        (typeof classes !== 'undefined' ? ' class="' + classes + '"' : '') +
-        (typeof inline !== 'undefined' ? ' style="' + inline + '"' : '') +
-        (typeof optgroup !== 'undefined' ? 'data-optgroup="' + optgroup + '"' : '') +
-        ' data-normalized-text="' + normText + '"' +
-        '>' + text +
-        '<span class="' + that.options.iconBase + ' ' + that.options.tickIcon + ' check-mark"></span>' +
-        '</a>';
+            (typeof classes !== 'undefined' ? ' class="' + classes + '"' : '') +
+            (typeof inline !== 'undefined' ? ' style="' + inline + '"' : '') +
+            ' data-normalized-text="' + normalizeToBase(htmlEscape(text)) + '"' +
+            (typeof tokens !== 'undefined' || tokens !== null ? ' data-tokens="' + tokens + '"' : '') +
+            '>' + text +
+            '<span class="' + that.options.iconBase + ' ' + that.options.tickIcon + ' check-mark"></span>' +
+            '</a>';
       };
 
-      this.$element.find('option').each(function () {
+      this.$element.find('option').each(function (index) {
         var $this = $(this);
 
         // Get the class and text for the option
         var optionClass = $this.attr('class') || '',
             inline = $this.attr('style'),
             text = $this.data('content') ? $this.data('content') : $this.html(),
-            subtext = typeof $this.data('subtext') !== 'undefined' ? '<small class="muted text-muted">' + $this.data('subtext') + '</small>' : '',
+            tokens = $this.data('tokens') ? $this.data('tokens') : null,
+            subtext = typeof $this.data('subtext') !== 'undefined' ? '<small class="text-muted">' + $this.data('subtext') + '</small>' : '',
             icon = typeof $this.data('icon') !== 'undefined' ? '<span class="' + that.options.iconBase + ' ' + $this.data('icon') + '"></span> ' : '',
-            isDisabled = $this.is(':disabled') || $this.parent().is(':disabled'),
-            index = $this[0].index;
+            isDisabled = $this.is(':disabled') || $this.parent().is(':disabled');
         if (icon !== '' && isDisabled) {
           icon = '<span>' + icon + '</span>';
         }
@@ -99012,24 +101004,25 @@ if (typeof jQuery === 'undefined') {
 
             // Get the opt group label
             var label = $this.parent().attr('label');
-            var labelSubtext = typeof $this.parent().data('subtext') !== 'undefined' ? '<small class="muted text-muted">' + $this.parent().data('subtext') + '</small>' : '';
+            var labelSubtext = typeof $this.parent().data('subtext') !== 'undefined' ? '<small class="text-muted">' + $this.parent().data('subtext') + '</small>' : '';
             var labelIcon = $this.parent().data('icon') ? '<span class="' + that.options.iconBase + ' ' + $this.parent().data('icon') + '"></span> ' : '';
             label = labelIcon + '<span class="text">' + label + labelSubtext + '</span>';
 
             if (index !== 0 && _li.length > 0) { // Is it NOT the first option of the select && are there elements in the dropdown?
-              _li.push(generateLI('', null, 'divider'));
+              _li.push(generateLI('', null, 'divider', optID + 'div'));
             }
 
-            _li.push(generateLI(label, null, 'dropdown-header'));
+            _li.push(generateLI(label, null, 'dropdown-header', optID));
           }
 
-          _li.push(generateLI(generateA(text, 'opt ' + optionClass, inline, optID), index));
+          _li.push(generateLI(generateA(text, 'opt ' + optionClass, inline, tokens), index, '', optID));
         } else if ($this.data('divider') === true) {
           _li.push(generateLI('', index, 'divider'));
         } else if ($this.data('hidden') === true) {
-          _li.push(generateLI(generateA(text, optionClass, inline), index, 'hide is-hidden'));
+          _li.push(generateLI(generateA(text, optionClass, inline, tokens), index, 'hidden is-hidden'));
         } else {
-          _li.push(generateLI(generateA(text, optionClass, inline), index));
+          if ($this.prev().is('optgroup')) _li.push(generateLI('', null, 'divider', optID + 'div'));
+          _li.push(generateLI(generateA(text, optionClass, inline, tokens), index));
         }
       });
 
@@ -99067,14 +101060,14 @@ if (typeof jQuery === 'undefined') {
         var icon = $this.data('icon') && that.options.showIcon ? '<i class="' + that.options.iconBase + ' ' + $this.data('icon') + '"></i> ' : '';
         var subtext;
         if (that.options.showSubtext && $this.attr('data-subtext') && !that.multiple) {
-          subtext = ' <small class="muted text-muted">' + $this.data('subtext') + '</small>';
+          subtext = ' <small class="text-muted">' + $this.data('subtext') + '</small>';
         } else {
           subtext = '';
         }
-        if ($this.data('content') && that.options.showContent) {
-          return $this.data('content');
-        } else if (typeof $this.attr('title') !== 'undefined') {
+        if (typeof $this.attr('title') !== 'undefined') {
           return $this.attr('title');
+        } else if ($this.data('content') && that.options.showContent) {
+          return $this.data('content');
         } else {
           return icon + $this.html() + subtext;
         }
@@ -99095,7 +101088,9 @@ if (typeof jQuery === 'undefined') {
         }
       }
 
-      this.options.title = this.$element.attr('title');
+      if (this.options.title == undefined) {
+        this.options.title = this.$element.attr('title');
+      }
 
       if (this.options.selectedTextFormat == 'static') {
         title = this.options.title;
@@ -99106,7 +101101,8 @@ if (typeof jQuery === 'undefined') {
         title = typeof this.options.title !== 'undefined' ? this.options.title : this.options.noneSelectedText;
       }
 
-      this.$button.attr('title', htmlEscape(title));
+      //strip all html-tags and trim the result
+      this.$button.attr('title', $.trim(title.replace(/<[^>]*>?/g, '')));
       this.$newElement.find('.filter-option').html(title);
     },
 
@@ -99134,12 +101130,13 @@ if (typeof jQuery === 'undefined') {
     liHeight: function () {
       if (this.options.size === false) return;
 
-      var $selectClone = this.$menu.parent().clone().find('> .dropdown-toggle').prop('autofocus', false).end().appendTo('body'),
-          $menuClone = $selectClone.addClass('open').find('> .dropdown-menu'),
+      var $selectClone = this.$menu.parent().clone().children('.dropdown-toggle').prop('autofocus', false).end().appendTo('body'),
+          $menuClone = $selectClone.addClass('open').children('.dropdown-menu'),
           liHeight = $menuClone.find('li').not('.divider').not('.dropdown-header').filter(':visible').children('a').outerHeight(),
           headerHeight = this.options.header ? $menuClone.find('.popover-title').outerHeight() : 0,
           searchHeight = this.options.liveSearch ? $menuClone.find('.bs-searchbox').outerHeight() : 0,
-          actionsHeight = this.options.actionsBox ? $menuClone.find('.bs-actionsbox').outerHeight() : 0;
+          actionsHeight = this.options.actionsBox ? $menuClone.find('.bs-actionsbox').outerHeight() : 0,
+          doneButtonHeight = this.multiple ? $menuClone.find('.bs-donebutton').outerHeight() : 0;
 
       $selectClone.remove();
 
@@ -99147,7 +101144,8 @@ if (typeof jQuery === 'undefined') {
           .data('liHeight', liHeight)
           .data('headerHeight', headerHeight)
           .data('searchHeight', searchHeight)
-          .data('actionsHeight', actionsHeight);
+          .data('actionsHeight', actionsHeight)
+          .data('doneButtonHeight', doneButtonHeight);
     },
 
     setSize: function () {
@@ -99160,6 +101158,7 @@ if (typeof jQuery === 'undefined') {
           headerHeight = this.$newElement.data('headerHeight'),
           searchHeight = this.$newElement.data('searchHeight'),
           actionsHeight = this.$newElement.data('actionsHeight'),
+          doneButtonHeight = this.$newElement.data('doneButtonHeight'),
           divHeight = this.$lis.filter('.divider').outerHeight(true),
           menuPadding = parseInt(menu.css('padding-top')) +
               parseInt(menu.css('padding-bottom')) +
@@ -99183,13 +101182,13 @@ if (typeof jQuery === 'undefined') {
       if (this.options.size == 'auto') {
         var getSize = function () {
           var minHeight,
-              lisVis = that.$lis.not('.hide');
+              lisVis = that.$lis.not('.hidden');
 
           posVert();
           menuHeight = selectOffsetBot - menuExtras;
 
           if (that.options.dropupAuto) {
-            that.$newElement.toggleClass('dropup', (selectOffsetTop > selectOffsetBot) && ((menuHeight - menuExtras) < menu.height()));
+            that.$newElement.toggleClass('dropup', selectOffsetTop > selectOffsetBot && (menuHeight - menuExtras) < menu.height());
           }
           if (that.$newElement.hasClass('dropup')) {
             menuHeight = selectOffsetTop - menuExtras;
@@ -99204,27 +101203,30 @@ if (typeof jQuery === 'undefined') {
           menu.css({
             'max-height': menuHeight + 'px',
             'overflow': 'hidden',
-            'min-height': minHeight + headerHeight + searchHeight + actionsHeight + 'px'
+            'min-height': minHeight + headerHeight + searchHeight + actionsHeight + doneButtonHeight + 'px'
           });
           menuInner.css({
-            'max-height': menuHeight - headerHeight - searchHeight - actionsHeight - menuPadding + 'px',
+            'max-height': menuHeight - headerHeight - searchHeight - actionsHeight - doneButtonHeight - menuPadding + 'px',
             'overflow-y': 'auto',
             'min-height': Math.max(minHeight - menuPadding, 0) + 'px'
           });
         };
         getSize();
         this.$searchbox.off('input.getSize propertychange.getSize').on('input.getSize propertychange.getSize', getSize);
-        $(window).off('resize.getSize').on('resize.getSize', getSize);
-        $(window).off('scroll.getSize').on('scroll.getSize', getSize);
+        $window.off('resize.getSize').on('resize.getSize', getSize);
+        $window.off('scroll.getSize').on('scroll.getSize', getSize);
       } else if (this.options.size && this.options.size != 'auto' && menu.find('li' + notDisabled).length > this.options.size) {
-        var optIndex = this.$lis.not('.divider' + notDisabled).find(' > *').slice(0, this.options.size).last().parent().index();
+        var optIndex = this.$lis.not('.divider' + notDisabled).children().slice(0, this.options.size).last().parent().index();
         var divLength = this.$lis.slice(0, optIndex + 1).filter('.divider').length;
         menuHeight = liHeight * this.options.size + divLength * divHeight + menuPadding;
         if (that.options.dropupAuto) {
           //noinspection JSUnusedAssignment
-          this.$newElement.toggleClass('dropup', (selectOffsetTop > selectOffsetBot) && (menuHeight < menu.height()));
+          this.$newElement.toggleClass('dropup', selectOffsetTop > selectOffsetBot && menuHeight < menu.height());
         }
-        menu.css({'max-height': menuHeight + headerHeight + searchHeight + actionsHeight + 'px', 'overflow': 'hidden'});
+        menu.css({
+          'max-height': menuHeight + headerHeight + searchHeight + actionsHeight + doneButtonHeight + 'px',
+          'overflow': 'hidden'
+        });
         menuInner.css({'max-height': menuHeight - menuPadding + 'px', 'overflow-y': 'auto'});
       }
     },
@@ -99235,8 +101237,8 @@ if (typeof jQuery === 'undefined') {
 
         // Get correct width if element hidden
         var selectClone = this.$newElement.clone().appendTo('body');
-        var ulWidth = selectClone.find('> .dropdown-menu').css('width');
-        var btnWidth = selectClone.css('width', 'auto').find('> button').css('width');
+        var ulWidth = selectClone.children('.dropdown-menu').css('width');
+        var btnWidth = selectClone.css('width', 'auto').children('button').css('width');
         selectClone.remove();
 
         // Set width to whatever's larger, button title or longest option
@@ -99392,7 +101394,7 @@ if (typeof jQuery === 'undefined') {
             that.setSelected(clickedIndex, !state);
             $this.blur();
 
-            if ((maxOptions !== false) || (maxOptionsGrp !== false)) {
+            if (maxOptions !== false || maxOptionsGrp !== false) {
               var maxReached = maxOptions < $options.filter(':selected').length,
                   maxReachedGrp = maxOptionsGrp < $optgroup.find('option:selected').length;
 
@@ -99463,7 +101465,7 @@ if (typeof jQuery === 'undefined') {
       });
 
       this.$menu.on('click', 'li.disabled a, .popover-title, .popover-title :not(.close)', function (e) {
-        if (e.target == this) {
+        if (e.currentTarget == this) {
           e.preventDefault();
           e.stopPropagation();
           if (!that.options.liveSearch) {
@@ -99524,7 +101526,7 @@ if (typeof jQuery === 'undefined') {
         that.$menu.find('.active').removeClass('active');
         if (!!that.$searchbox.val()) {
           that.$searchbox.val('');
-          that.$lis.not('.is-hidden').removeClass('hide');
+          that.$lis.not('.is-hidden').removeClass('hidden');
           if (!!no_results.parent().length) no_results.remove();
         }
         if (!that.multiple) that.$menu.find('.selected').addClass('active');
@@ -99539,30 +101541,75 @@ if (typeof jQuery === 'undefined') {
 
       this.$searchbox.on('input propertychange', function () {
         if (that.$searchbox.val()) {
-
-          if (that.options.searchAccentInsensitive) {
-            that.$lis.not('.is-hidden').removeClass('hide').find('a').not(':aicontains(' + normalizeToBase(that.$searchbox.val()) + ')').parent().addClass('hide');
+          var $searchBase = that.$lis.not('.is-hidden').removeClass('hidden').find('a');
+          if (that.options.liveSearchNormalize) {
+            $searchBase = $searchBase.not(':a' + that._searchStyle() + '(' + normalizeToBase(that.$searchbox.val()) + ')');
           } else {
-            that.$lis.not('.is-hidden').removeClass('hide').find('a').not(':icontains(' + that.$searchbox.val() + ')').parent().addClass('hide');
+            $searchBase = $searchBase.not(':' + that._searchStyle() + '(' + that.$searchbox.val() + ')');
           }
+          $searchBase.parent().addClass('hidden');
 
-          if (!that.$menu.find('li').filter(':visible:not(.no-results)').length) {
-            if (!!no_results.parent().length) no_results.remove();
-            no_results.html(that.options.noneResultsText + ' "' + htmlEscape(that.$searchbox.val()) + '"').show();
+          that.$lis.filter('.dropdown-header').each(function () {
+            var $this = $(this),
+                optgroup = $this.data('optgroup');
+
+            if (that.$lis.filter('[data-optgroup=' + optgroup + ']').not($this).not('.hidden').length === 0) {
+              $this.addClass('hidden');
+              that.$lis.filter('[data-optgroup=' + optgroup + 'div]').addClass('hidden');
+            }
+          });
+
+          var $lisVisible = that.$lis.not('.hidden');
+
+          // hide divider if first or last visible, or if followed by another divider
+          $lisVisible.each(function(index) {
+              var $this = $(this);
+              
+              if ($this.is('.divider')) {
+                  if ($this.index() === $lisVisible.eq(0).index() || 
+                      $this.index() === $lisVisible.last().index() ||
+                      $lisVisible.eq(index + 1).is('.divider')) {
+                      $this.addClass('hidden');
+                  }
+              }
+          });
+
+          if (!that.$lis.filter(':not(.hidden):not(.no-results)').length) {
+            if (!!no_results.parent().length) {
+              no_results.remove();
+            }
+            no_results.html(that.options.noneResultsText.replace('{0}', '"' + htmlEscape(that.$searchbox.val()) + '"')).show();
             that.$menu.find('li').last().after(no_results);
           } else if (!!no_results.parent().length) {
             no_results.remove();
           }
 
         } else {
-          that.$lis.not('.is-hidden').removeClass('hide');
-          if (!!no_results.parent().length) no_results.remove();
+          that.$lis.not('.is-hidden').removeClass('hidden');
+          if (!!no_results.parent().length) {
+            no_results.remove();
+          }
         }
 
-        that.$menu.find('li.active').removeClass('active');
-        that.$menu.find('li').filter(':visible:not(.divider)').eq(0).addClass('active').find('a').focus();
+        that.$lis.filter('.active').removeClass('active');
+        that.$lis.filter(':not(.hidden):not(.divider):not(.dropdown-header)').eq(0).addClass('active').find('a').focus();
         $(this).focus();
       });
+    },
+
+    _searchStyle: function () {
+      var style = 'icontains';
+      switch (this.options.liveSearchStyle) {
+        case 'begins':
+        case 'startsWith':
+          style = 'ibegins';
+          break;
+        case 'contains':
+        default:
+          break; //no need to change the default
+      }
+
+      return style;
     },
 
     val: function (value) {
@@ -99578,12 +101625,16 @@ if (typeof jQuery === 'undefined') {
 
     selectAll: function () {
       this.findLis();
-      this.$lis.not('.divider').not('.disabled').not('.selected').filter(':visible').find('a').click();
+      this.$element.find('option:enabled').not('[data-divider]').not('[data-hidden]').prop('selected', true);
+      this.$lis.not('.divider').not('.dropdown-header').not('.disabled').not('.hidden').addClass('selected');
+      this.render(false);
     },
 
     deselectAll: function () {
       this.findLis();
-      this.$lis.not('.divider').not('.disabled').filter('.selected').filter(':visible').find('a').click();
+      this.$element.find('option:enabled').not('[data-divider]').not('[data-hidden]').prop('selected', false);
+      this.$lis.not('.divider').not('.dropdown-header').not('.disabled').not('.hidden').removeClass('selected');
+      this.render(false);
     },
 
     keydown: function (e) {
@@ -99675,13 +101726,14 @@ if (typeof jQuery === 'undefined') {
           that.$menu.parent().removeClass('open');
           that.$button.focus();
         }
-        $items = $('[role=menu] li:not(.divider):not(.dropdown-header):visible', $parent);
+        $items = $('[role=menu] li:not(.divider):not(.dropdown-header):visible a', $parent);
         if (!$this.val() && !/(38|40)/.test(e.keyCode.toString(10))) {
           if ($items.filter('.active').length === 0) {
-            if (that.options.searchAccentInsensitive) {
-              $items = that.$newElement.find('li').filter(':aicontains(' + normalizeToBase(keyCodeMap[e.keyCode]) + ')');
+            $items = that.$newElement.find('li a');
+            if (that.options.liveSearchNormalize) {
+              $items = $items.filter(':a' + that._searchStyle() + '(' + normalizeToBase(keyCodeMap[e.keyCode]) + ')');
             } else {
-              $items = that.$newElement.find('li').filter(':icontains(' + keyCodeMap[e.keyCode] + ')');
+              $items = $items.filter(':' + that._searchStyle() + '(' + keyCodeMap[e.keyCode] + ')');
             }
           }
         }
@@ -99775,7 +101827,12 @@ if (typeof jQuery === 'undefined') {
       if ((/(13|32)/.test(e.keyCode.toString(10)) || (/(^9$)/.test(e.keyCode.toString(10)) && that.options.selectOnTab)) && isActive) {
         if (!/(32)/.test(e.keyCode.toString(10))) e.preventDefault();
         if (!that.options.liveSearch) {
-          $(':focus').click();
+          var elem = $(':focus');
+          elem.click();
+          // Bring back focus for multiselects
+          elem.focus();
+          // Prevent screen from scrolling if the user hit the spacebar
+          e.preventDefault();
         } else if (!/(32)/.test(e.keyCode.toString(10))) {
           that.$menu.find('.active a').click();
           $this.focus();
@@ -99804,14 +101861,6 @@ if (typeof jQuery === 'undefined') {
       this.liHeight();
     },
 
-    update: function () {
-      this.reloadLi();
-      this.setWidth();
-      this.setStyle();
-      this.checkDisabled();
-      this.liHeight();
-    },
-
     hide: function () {
       this.$newElement.hide();
     },
@@ -99832,28 +101881,21 @@ if (typeof jQuery === 'undefined') {
     // get the args of the outer function..
     var args = arguments;
     // The arguments of the function are explicitly re-defined from the argument list, because the shift causes them
-    // to get lost
-    //noinspection JSDuplicatedDeclaration
+    // to get lost/corrupted in android 2.3 and IE9 #715 #775
     var _option = option,
-        option = args[0],
-        event = args[1];
+        _event = event;
     [].shift.apply(args);
-
-    // This fixes a bug in the js implementation on android 2.3 #715
-    if (typeof option == 'undefined') {
-      option = _option;
-    }
 
     var value;
     var chain = this.each(function () {
       var $this = $(this);
       if ($this.is('select')) {
         var data = $this.data('selectpicker'),
-            options = typeof option == 'object' && option;
+            options = typeof _option == 'object' && _option;
 
         if (!data) {
           var config = $.extend({}, Selectpicker.DEFAULTS, $.fn.selectpicker.defaults || {}, $this.data(), options);
-          $this.data('selectpicker', (data = new Selectpicker(this, config, event)));
+          $this.data('selectpicker', (data = new Selectpicker(this, config, _event)));
         } else if (options) {
           for (var i in options) {
             if (options.hasOwnProperty(i)) {
@@ -99862,11 +101904,11 @@ if (typeof jQuery === 'undefined') {
           }
         }
 
-        if (typeof option == 'string') {
-          if (data[option] instanceof Function) {
-            value = data[option].apply(data, args);
+        if (typeof _option == 'string') {
+          if (data[_option] instanceof Function) {
+            value = data[_option].apply(data, args);
           } else {
-            value = data.options[option];
+            value = data.options[_option];
           }
         }
       }
@@ -100190,7 +102232,14 @@ if (typeof jQuery === 'undefined') {
 //     Underscore may be freely distributed under the MIT license.
 (function(){var n=this,t=n._,r=Array.prototype,e=Object.prototype,u=Function.prototype,i=r.push,a=r.slice,o=r.concat,l=e.toString,c=e.hasOwnProperty,f=Array.isArray,s=Object.keys,p=u.bind,h=function(n){return n instanceof h?n:this instanceof h?void(this._wrapped=n):new h(n)};"undefined"!=typeof exports?("undefined"!=typeof module&&module.exports&&(exports=module.exports=h),exports._=h):n._=h,h.VERSION="1.7.0";var g=function(n,t,r){if(t===void 0)return n;switch(null==r?3:r){case 1:return function(r){return n.call(t,r)};case 2:return function(r,e){return n.call(t,r,e)};case 3:return function(r,e,u){return n.call(t,r,e,u)};case 4:return function(r,e,u,i){return n.call(t,r,e,u,i)}}return function(){return n.apply(t,arguments)}};h.iteratee=function(n,t,r){return null==n?h.identity:h.isFunction(n)?g(n,t,r):h.isObject(n)?h.matches(n):h.property(n)},h.each=h.forEach=function(n,t,r){if(null==n)return n;t=g(t,r);var e,u=n.length;if(u===+u)for(e=0;u>e;e++)t(n[e],e,n);else{var i=h.keys(n);for(e=0,u=i.length;u>e;e++)t(n[i[e]],i[e],n)}return n},h.map=h.collect=function(n,t,r){if(null==n)return[];t=h.iteratee(t,r);for(var e,u=n.length!==+n.length&&h.keys(n),i=(u||n).length,a=Array(i),o=0;i>o;o++)e=u?u[o]:o,a[o]=t(n[e],e,n);return a};var v="Reduce of empty array with no initial value";h.reduce=h.foldl=h.inject=function(n,t,r,e){null==n&&(n=[]),t=g(t,e,4);var u,i=n.length!==+n.length&&h.keys(n),a=(i||n).length,o=0;if(arguments.length<3){if(!a)throw new TypeError(v);r=n[i?i[o++]:o++]}for(;a>o;o++)u=i?i[o]:o,r=t(r,n[u],u,n);return r},h.reduceRight=h.foldr=function(n,t,r,e){null==n&&(n=[]),t=g(t,e,4);var u,i=n.length!==+n.length&&h.keys(n),a=(i||n).length;if(arguments.length<3){if(!a)throw new TypeError(v);r=n[i?i[--a]:--a]}for(;a--;)u=i?i[a]:a,r=t(r,n[u],u,n);return r},h.find=h.detect=function(n,t,r){var e;return t=h.iteratee(t,r),h.some(n,function(n,r,u){return t(n,r,u)?(e=n,!0):void 0}),e},h.filter=h.select=function(n,t,r){var e=[];return null==n?e:(t=h.iteratee(t,r),h.each(n,function(n,r,u){t(n,r,u)&&e.push(n)}),e)},h.reject=function(n,t,r){return h.filter(n,h.negate(h.iteratee(t)),r)},h.every=h.all=function(n,t,r){if(null==n)return!0;t=h.iteratee(t,r);var e,u,i=n.length!==+n.length&&h.keys(n),a=(i||n).length;for(e=0;a>e;e++)if(u=i?i[e]:e,!t(n[u],u,n))return!1;return!0},h.some=h.any=function(n,t,r){if(null==n)return!1;t=h.iteratee(t,r);var e,u,i=n.length!==+n.length&&h.keys(n),a=(i||n).length;for(e=0;a>e;e++)if(u=i?i[e]:e,t(n[u],u,n))return!0;return!1},h.contains=h.include=function(n,t){return null==n?!1:(n.length!==+n.length&&(n=h.values(n)),h.indexOf(n,t)>=0)},h.invoke=function(n,t){var r=a.call(arguments,2),e=h.isFunction(t);return h.map(n,function(n){return(e?t:n[t]).apply(n,r)})},h.pluck=function(n,t){return h.map(n,h.property(t))},h.where=function(n,t){return h.filter(n,h.matches(t))},h.findWhere=function(n,t){return h.find(n,h.matches(t))},h.max=function(n,t,r){var e,u,i=-1/0,a=-1/0;if(null==t&&null!=n){n=n.length===+n.length?n:h.values(n);for(var o=0,l=n.length;l>o;o++)e=n[o],e>i&&(i=e)}else t=h.iteratee(t,r),h.each(n,function(n,r,e){u=t(n,r,e),(u>a||u===-1/0&&i===-1/0)&&(i=n,a=u)});return i},h.min=function(n,t,r){var e,u,i=1/0,a=1/0;if(null==t&&null!=n){n=n.length===+n.length?n:h.values(n);for(var o=0,l=n.length;l>o;o++)e=n[o],i>e&&(i=e)}else t=h.iteratee(t,r),h.each(n,function(n,r,e){u=t(n,r,e),(a>u||1/0===u&&1/0===i)&&(i=n,a=u)});return i},h.shuffle=function(n){for(var t,r=n&&n.length===+n.length?n:h.values(n),e=r.length,u=Array(e),i=0;e>i;i++)t=h.random(0,i),t!==i&&(u[i]=u[t]),u[t]=r[i];return u},h.sample=function(n,t,r){return null==t||r?(n.length!==+n.length&&(n=h.values(n)),n[h.random(n.length-1)]):h.shuffle(n).slice(0,Math.max(0,t))},h.sortBy=function(n,t,r){return t=h.iteratee(t,r),h.pluck(h.map(n,function(n,r,e){return{value:n,index:r,criteria:t(n,r,e)}}).sort(function(n,t){var r=n.criteria,e=t.criteria;if(r!==e){if(r>e||r===void 0)return 1;if(e>r||e===void 0)return-1}return n.index-t.index}),"value")};var m=function(n){return function(t,r,e){var u={};return r=h.iteratee(r,e),h.each(t,function(e,i){var a=r(e,i,t);n(u,e,a)}),u}};h.groupBy=m(function(n,t,r){h.has(n,r)?n[r].push(t):n[r]=[t]}),h.indexBy=m(function(n,t,r){n[r]=t}),h.countBy=m(function(n,t,r){h.has(n,r)?n[r]++:n[r]=1}),h.sortedIndex=function(n,t,r,e){r=h.iteratee(r,e,1);for(var u=r(t),i=0,a=n.length;a>i;){var o=i+a>>>1;r(n[o])<u?i=o+1:a=o}return i},h.toArray=function(n){return n?h.isArray(n)?a.call(n):n.length===+n.length?h.map(n,h.identity):h.values(n):[]},h.size=function(n){return null==n?0:n.length===+n.length?n.length:h.keys(n).length},h.partition=function(n,t,r){t=h.iteratee(t,r);var e=[],u=[];return h.each(n,function(n,r,i){(t(n,r,i)?e:u).push(n)}),[e,u]},h.first=h.head=h.take=function(n,t,r){return null==n?void 0:null==t||r?n[0]:0>t?[]:a.call(n,0,t)},h.initial=function(n,t,r){return a.call(n,0,Math.max(0,n.length-(null==t||r?1:t)))},h.last=function(n,t,r){return null==n?void 0:null==t||r?n[n.length-1]:a.call(n,Math.max(n.length-t,0))},h.rest=h.tail=h.drop=function(n,t,r){return a.call(n,null==t||r?1:t)},h.compact=function(n){return h.filter(n,h.identity)};var y=function(n,t,r,e){if(t&&h.every(n,h.isArray))return o.apply(e,n);for(var u=0,a=n.length;a>u;u++){var l=n[u];h.isArray(l)||h.isArguments(l)?t?i.apply(e,l):y(l,t,r,e):r||e.push(l)}return e};h.flatten=function(n,t){return y(n,t,!1,[])},h.without=function(n){return h.difference(n,a.call(arguments,1))},h.uniq=h.unique=function(n,t,r,e){if(null==n)return[];h.isBoolean(t)||(e=r,r=t,t=!1),null!=r&&(r=h.iteratee(r,e));for(var u=[],i=[],a=0,o=n.length;o>a;a++){var l=n[a];if(t)a&&i===l||u.push(l),i=l;else if(r){var c=r(l,a,n);h.indexOf(i,c)<0&&(i.push(c),u.push(l))}else h.indexOf(u,l)<0&&u.push(l)}return u},h.union=function(){return h.uniq(y(arguments,!0,!0,[]))},h.intersection=function(n){if(null==n)return[];for(var t=[],r=arguments.length,e=0,u=n.length;u>e;e++){var i=n[e];if(!h.contains(t,i)){for(var a=1;r>a&&h.contains(arguments[a],i);a++);a===r&&t.push(i)}}return t},h.difference=function(n){var t=y(a.call(arguments,1),!0,!0,[]);return h.filter(n,function(n){return!h.contains(t,n)})},h.zip=function(n){if(null==n)return[];for(var t=h.max(arguments,"length").length,r=Array(t),e=0;t>e;e++)r[e]=h.pluck(arguments,e);return r},h.object=function(n,t){if(null==n)return{};for(var r={},e=0,u=n.length;u>e;e++)t?r[n[e]]=t[e]:r[n[e][0]]=n[e][1];return r},h.indexOf=function(n,t,r){if(null==n)return-1;var e=0,u=n.length;if(r){if("number"!=typeof r)return e=h.sortedIndex(n,t),n[e]===t?e:-1;e=0>r?Math.max(0,u+r):r}for(;u>e;e++)if(n[e]===t)return e;return-1},h.lastIndexOf=function(n,t,r){if(null==n)return-1;var e=n.length;for("number"==typeof r&&(e=0>r?e+r+1:Math.min(e,r+1));--e>=0;)if(n[e]===t)return e;return-1},h.range=function(n,t,r){arguments.length<=1&&(t=n||0,n=0),r=r||1;for(var e=Math.max(Math.ceil((t-n)/r),0),u=Array(e),i=0;e>i;i++,n+=r)u[i]=n;return u};var d=function(){};h.bind=function(n,t){var r,e;if(p&&n.bind===p)return p.apply(n,a.call(arguments,1));if(!h.isFunction(n))throw new TypeError("Bind must be called on a function");return r=a.call(arguments,2),e=function(){if(!(this instanceof e))return n.apply(t,r.concat(a.call(arguments)));d.prototype=n.prototype;var u=new d;d.prototype=null;var i=n.apply(u,r.concat(a.call(arguments)));return h.isObject(i)?i:u}},h.partial=function(n){var t=a.call(arguments,1);return function(){for(var r=0,e=t.slice(),u=0,i=e.length;i>u;u++)e[u]===h&&(e[u]=arguments[r++]);for(;r<arguments.length;)e.push(arguments[r++]);return n.apply(this,e)}},h.bindAll=function(n){var t,r,e=arguments.length;if(1>=e)throw new Error("bindAll must be passed function names");for(t=1;e>t;t++)r=arguments[t],n[r]=h.bind(n[r],n);return n},h.memoize=function(n,t){var r=function(e){var u=r.cache,i=t?t.apply(this,arguments):e;return h.has(u,i)||(u[i]=n.apply(this,arguments)),u[i]};return r.cache={},r},h.delay=function(n,t){var r=a.call(arguments,2);return setTimeout(function(){return n.apply(null,r)},t)},h.defer=function(n){return h.delay.apply(h,[n,1].concat(a.call(arguments,1)))},h.throttle=function(n,t,r){var e,u,i,a=null,o=0;r||(r={});var l=function(){o=r.leading===!1?0:h.now(),a=null,i=n.apply(e,u),a||(e=u=null)};return function(){var c=h.now();o||r.leading!==!1||(o=c);var f=t-(c-o);return e=this,u=arguments,0>=f||f>t?(clearTimeout(a),a=null,o=c,i=n.apply(e,u),a||(e=u=null)):a||r.trailing===!1||(a=setTimeout(l,f)),i}},h.debounce=function(n,t,r){var e,u,i,a,o,l=function(){var c=h.now()-a;t>c&&c>0?e=setTimeout(l,t-c):(e=null,r||(o=n.apply(i,u),e||(i=u=null)))};return function(){i=this,u=arguments,a=h.now();var c=r&&!e;return e||(e=setTimeout(l,t)),c&&(o=n.apply(i,u),i=u=null),o}},h.wrap=function(n,t){return h.partial(t,n)},h.negate=function(n){return function(){return!n.apply(this,arguments)}},h.compose=function(){var n=arguments,t=n.length-1;return function(){for(var r=t,e=n[t].apply(this,arguments);r--;)e=n[r].call(this,e);return e}},h.after=function(n,t){return function(){return--n<1?t.apply(this,arguments):void 0}},h.before=function(n,t){var r;return function(){return--n>0?r=t.apply(this,arguments):t=null,r}},h.once=h.partial(h.before,2),h.keys=function(n){if(!h.isObject(n))return[];if(s)return s(n);var t=[];for(var r in n)h.has(n,r)&&t.push(r);return t},h.values=function(n){for(var t=h.keys(n),r=t.length,e=Array(r),u=0;r>u;u++)e[u]=n[t[u]];return e},h.pairs=function(n){for(var t=h.keys(n),r=t.length,e=Array(r),u=0;r>u;u++)e[u]=[t[u],n[t[u]]];return e},h.invert=function(n){for(var t={},r=h.keys(n),e=0,u=r.length;u>e;e++)t[n[r[e]]]=r[e];return t},h.functions=h.methods=function(n){var t=[];for(var r in n)h.isFunction(n[r])&&t.push(r);return t.sort()},h.extend=function(n){if(!h.isObject(n))return n;for(var t,r,e=1,u=arguments.length;u>e;e++){t=arguments[e];for(r in t)c.call(t,r)&&(n[r]=t[r])}return n},h.pick=function(n,t,r){var e,u={};if(null==n)return u;if(h.isFunction(t)){t=g(t,r);for(e in n){var i=n[e];t(i,e,n)&&(u[e]=i)}}else{var l=o.apply([],a.call(arguments,1));n=new Object(n);for(var c=0,f=l.length;f>c;c++)e=l[c],e in n&&(u[e]=n[e])}return u},h.omit=function(n,t,r){if(h.isFunction(t))t=h.negate(t);else{var e=h.map(o.apply([],a.call(arguments,1)),String);t=function(n,t){return!h.contains(e,t)}}return h.pick(n,t,r)},h.defaults=function(n){if(!h.isObject(n))return n;for(var t=1,r=arguments.length;r>t;t++){var e=arguments[t];for(var u in e)n[u]===void 0&&(n[u]=e[u])}return n},h.clone=function(n){return h.isObject(n)?h.isArray(n)?n.slice():h.extend({},n):n},h.tap=function(n,t){return t(n),n};var b=function(n,t,r,e){if(n===t)return 0!==n||1/n===1/t;if(null==n||null==t)return n===t;n instanceof h&&(n=n._wrapped),t instanceof h&&(t=t._wrapped);var u=l.call(n);if(u!==l.call(t))return!1;switch(u){case"[object RegExp]":case"[object String]":return""+n==""+t;case"[object Number]":return+n!==+n?+t!==+t:0===+n?1/+n===1/t:+n===+t;case"[object Date]":case"[object Boolean]":return+n===+t}if("object"!=typeof n||"object"!=typeof t)return!1;for(var i=r.length;i--;)if(r[i]===n)return e[i]===t;var a=n.constructor,o=t.constructor;if(a!==o&&"constructor"in n&&"constructor"in t&&!(h.isFunction(a)&&a instanceof a&&h.isFunction(o)&&o instanceof o))return!1;r.push(n),e.push(t);var c,f;if("[object Array]"===u){if(c=n.length,f=c===t.length)for(;c--&&(f=b(n[c],t[c],r,e)););}else{var s,p=h.keys(n);if(c=p.length,f=h.keys(t).length===c)for(;c--&&(s=p[c],f=h.has(t,s)&&b(n[s],t[s],r,e)););}return r.pop(),e.pop(),f};h.isEqual=function(n,t){return b(n,t,[],[])},h.isEmpty=function(n){if(null==n)return!0;if(h.isArray(n)||h.isString(n)||h.isArguments(n))return 0===n.length;for(var t in n)if(h.has(n,t))return!1;return!0},h.isElement=function(n){return!(!n||1!==n.nodeType)},h.isArray=f||function(n){return"[object Array]"===l.call(n)},h.isObject=function(n){var t=typeof n;return"function"===t||"object"===t&&!!n},h.each(["Arguments","Function","String","Number","Date","RegExp"],function(n){h["is"+n]=function(t){return l.call(t)==="[object "+n+"]"}}),h.isArguments(arguments)||(h.isArguments=function(n){return h.has(n,"callee")}),"function"!=typeof/./&&(h.isFunction=function(n){return"function"==typeof n||!1}),h.isFinite=function(n){return isFinite(n)&&!isNaN(parseFloat(n))},h.isNaN=function(n){return h.isNumber(n)&&n!==+n},h.isBoolean=function(n){return n===!0||n===!1||"[object Boolean]"===l.call(n)},h.isNull=function(n){return null===n},h.isUndefined=function(n){return n===void 0},h.has=function(n,t){return null!=n&&c.call(n,t)},h.noConflict=function(){return n._=t,this},h.identity=function(n){return n},h.constant=function(n){return function(){return n}},h.noop=function(){},h.property=function(n){return function(t){return t[n]}},h.matches=function(n){var t=h.pairs(n),r=t.length;return function(n){if(null==n)return!r;n=new Object(n);for(var e=0;r>e;e++){var u=t[e],i=u[0];if(u[1]!==n[i]||!(i in n))return!1}return!0}},h.times=function(n,t,r){var e=Array(Math.max(0,n));t=g(t,r,1);for(var u=0;n>u;u++)e[u]=t(u);return e},h.random=function(n,t){return null==t&&(t=n,n=0),n+Math.floor(Math.random()*(t-n+1))},h.now=Date.now||function(){return(new Date).getTime()};var _={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#x27;","`":"&#x60;"},w=h.invert(_),j=function(n){var t=function(t){return n[t]},r="(?:"+h.keys(n).join("|")+")",e=RegExp(r),u=RegExp(r,"g");return function(n){return n=null==n?"":""+n,e.test(n)?n.replace(u,t):n}};h.escape=j(_),h.unescape=j(w),h.result=function(n,t){if(null==n)return void 0;var r=n[t];return h.isFunction(r)?n[t]():r};var x=0;h.uniqueId=function(n){var t=++x+"";return n?n+t:t},h.templateSettings={evaluate:/<%([\s\S]+?)%>/g,interpolate:/<%=([\s\S]+?)%>/g,escape:/<%-([\s\S]+?)%>/g};var A=/(.)^/,k={"'":"'","\\":"\\","\r":"r","\n":"n","\u2028":"u2028","\u2029":"u2029"},O=/\\|'|\r|\n|\u2028|\u2029/g,F=function(n){return"\\"+k[n]};h.template=function(n,t,r){!t&&r&&(t=r),t=h.defaults({},t,h.templateSettings);var e=RegExp([(t.escape||A).source,(t.interpolate||A).source,(t.evaluate||A).source].join("|")+"|$","g"),u=0,i="__p+='";n.replace(e,function(t,r,e,a,o){return i+=n.slice(u,o).replace(O,F),u=o+t.length,r?i+="'+\n((__t=("+r+"))==null?'':_.escape(__t))+\n'":e?i+="'+\n((__t=("+e+"))==null?'':__t)+\n'":a&&(i+="';\n"+a+"\n__p+='"),t}),i+="';\n",t.variable||(i="with(obj||{}){\n"+i+"}\n"),i="var __t,__p='',__j=Array.prototype.join,"+"print=function(){__p+=__j.call(arguments,'');};\n"+i+"return __p;\n";try{var a=new Function(t.variable||"obj","_",i)}catch(o){throw o.source=i,o}var l=function(n){return a.call(this,n,h)},c=t.variable||"obj";return l.source="function("+c+"){\n"+i+"}",l},h.chain=function(n){var t=h(n);return t._chain=!0,t};var E=function(n){return this._chain?h(n).chain():n};h.mixin=function(n){h.each(h.functions(n),function(t){var r=h[t]=n[t];h.prototype[t]=function(){var n=[this._wrapped];return i.apply(n,arguments),E.call(this,r.apply(h,n))}})},h.mixin(h),h.each(["pop","push","reverse","shift","sort","splice","unshift"],function(n){var t=r[n];h.prototype[n]=function(){var r=this._wrapped;return t.apply(r,arguments),"shift"!==n&&"splice"!==n||0!==r.length||delete r[0],E.call(this,r)}}),h.each(["concat","join","slice"],function(n){var t=r[n];h.prototype[n]=function(){return E.call(this,t.apply(this._wrapped,arguments))}}),h.prototype.value=function(){return this._wrapped},"function"==typeof define&&define.amd&&define("underscore",[],function(){return h})}).call(this);
 
-;define('ember-breadcrumbs/components/bread-crumbs', ['exports', 'ember'], function (exports, Ember) {
+;define("ember-breadcrumbs", ["ember-breadcrumbs/index","exports"], function(__index__, __exports__) {
+  "use strict";
+  Object.keys(__index__).forEach(function(key){
+    __exports__[key] = __index__[key];
+  });
+});
+
+define('ember-breadcrumbs/components/bread-crumbs', ['exports', 'ember'], function (exports, Ember) {
 
   'use strict';
 
@@ -100245,7 +102294,7 @@ if (typeof jQuery === 'undefined') {
   });
 
 });
-define("ember-breadcrumbs", ["ember-breadcrumbs/index","exports"], function(__index__, __exports__) {
+define("ember-notify", ["ember-notify/index","exports"], function(__index__, __exports__) {
   "use strict";
   Object.keys(__index__).forEach(function(key){
     __exports__[key] = __index__[key];
@@ -100309,6 +102358,10 @@ define('ember-notify/components/ember-notify', ['exports', 'ember', 'ember-notif
       });
     },
     didInsertElement: function() {
+      var element = this.get('message.element');
+      if (element) {
+        this.$('.message').append(element);
+      }
       if (Ember['default'].isNone(this.get('message.visible'))) {
         // the element is added to the DOM in its hidden state, so that
         // adding the 'ember-notify-show' class triggers the CSS transition
@@ -100517,10 +102570,9 @@ define('ember-notify/message', ['exports', 'ember'], function (exports, Ember) {
   });
 
 });
-define("ember-notify", ["ember-notify/index","exports"], function(__index__, __exports__) {
-  "use strict";
-  Object.keys(__index__).forEach(function(key){
-    __exports__[key] = __index__[key];
-  });
-});
+;/* jshint ignore:start */
+
+
+
+/* jshint ignore:end */
 //# sourceMappingURL=vendor.map

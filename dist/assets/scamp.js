@@ -1,3 +1,7 @@
+/* jshint ignore:start */
+
+/* jshint ignore:end */
+
 define('scamp/adapters/application', ['exports', 'ember-data'], function (exports, DS) {
 
 	'use strict';
@@ -184,6 +188,15 @@ define('scamp/controllers/dashboard', ['exports', 'ember'], function (exports, E
     });
 
 });
+define('scamp/controllers/login', ['exports', 'ember', 'simple-auth/mixins/login-controller-mixin'], function (exports, Ember, LoginControllerMixin) {
+
+  'use strict';
+
+  exports['default'] = Ember['default'].Controller.extend(LoginControllerMixin['default'], {
+    authenticator: "authenticator:torii"
+  });
+
+});
 define('scamp/controllers/logs', ['exports', 'ember'], function (exports, Ember) {
 
     'use strict';
@@ -215,7 +228,7 @@ define('scamp/controllers/resources', ['exports', 'ember'], function (exports, E
         groupsLookup: Ember['default'].computed.sort("groups", "groupsSorting"),
 
         actions: {
-            addResource: function () {
+            addResource: function addResource() {
                 var name = this.get("rName"),
                     state = this.get("rState"),
                     remaining = this.get("rRemaining"),
@@ -264,7 +277,7 @@ define('scamp/helpers/fa-icon', ['exports', 'ember'], function (exports, Ember) 
    * @param  {Object} options Options passed to helper.
    * @return {Ember.Handlebars.SafeString} The HTML markup.
    */
-  var faIcon = function (name, options) {
+  var faIcon = function faIcon(name, options) {
     if (Ember['default'].typeOf(name) !== "string") {
       var message = "fa-icon: no icon specified";
       warn(message);
@@ -345,7 +358,7 @@ define('scamp/initializers/app-version', ['exports', 'scamp/config/environment',
 
   exports['default'] = {
     name: "App Version",
-    initialize: function (container, application) {
+    initialize: function initialize(container, application) {
       var appName = classify(application.toString());
       Ember['default'].libraries.register(appName, config['default'].APP.version);
     }
@@ -358,7 +371,7 @@ define('scamp/initializers/bread-crumbs', ['exports'], function (exports) {
 
   exports['default'] = {
     name: "ember-breadcrumbs",
-    initialize: function (container, app) {
+    initialize: function initialize(container, app) {
       app.inject("component:bread-crumbs", "router", "router:main");
       app.inject("component:bread-crumbs", "applicationController", "controller:application");
     }
@@ -371,7 +384,7 @@ define('scamp/initializers/ember-notify', ['exports', 'ember-notify'], function 
 
   exports['default'] = {
     name: "ember-notify",
-    initialize: function (container, app) {
+    initialize: function initialize(container, app) {
       container.optionsForType("notify", { instantiate: false, singleton: true });
       app.register("notify:main", Notify['default']);
       app.inject("route", "notify", "notify:main");
@@ -389,7 +402,7 @@ define('scamp/initializers/export-application-global', ['exports', 'ember', 'sca
   function initialize(container, application) {
     var classifiedName = Ember['default'].String.classify(config['default'].modulePrefix);
 
-    if (config['default'].exportApplicationGlobal) {
+    if (config['default'].exportApplicationGlobal && !window[classifiedName]) {
       window[classifiedName] = application;
     }
   };
@@ -401,13 +414,82 @@ define('scamp/initializers/export-application-global', ['exports', 'ember', 'sca
   };
 
 });
+define('scamp/initializers/initialize-torii-callback', ['exports', 'torii/redirect-handler'], function (exports, RedirectHandler) {
+
+  'use strict';
+
+  exports['default'] = {
+    name: "torii-callback",
+    before: "torii",
+    initialize: function initialize(container, app) {
+      app.deferReadiness();
+      RedirectHandler['default'].handle(window.location.toString())["catch"](function () {
+        app.advanceReadiness();
+      });
+    }
+  };
+
+});
+define('scamp/initializers/initialize-torii-session', ['exports', 'torii/configuration', 'torii/bootstrap/session'], function (exports, configuration, bootstrapSession) {
+
+  'use strict';
+
+  exports['default'] = {
+    name: "torii-session",
+    after: "torii",
+
+    initialize: function initialize(container) {
+      if (configuration['default'].sessionServiceName) {
+        bootstrapSession['default'](container, configuration['default'].sessionServiceName);
+        container.injection("adapter", configuration['default'].sessionServiceName, "torii:session");
+      }
+    }
+  };
+
+});
+define('scamp/initializers/initialize-torii', ['exports', 'torii/bootstrap/torii', 'torii/configuration'], function (exports, bootstrapTorii, configuration) {
+
+  'use strict';
+
+  var initializer = {
+    name: "torii",
+    initialize: function initialize(container, app) {
+      bootstrapTorii['default'](container);
+
+      // Walk all configured providers and eagerly instantiate
+      // them. This gives providers with initialization side effects
+      // like facebook-connect a chance to load up assets.
+      for (var key in configuration['default'].providers) {
+        if (configuration['default'].providers.hasOwnProperty(key)) {
+          container.lookup("torii-provider:" + key);
+        }
+      }
+
+      app.inject("route", "torii", "torii:main");
+    }
+  };
+
+  if (window.DS) {
+    initializer.after = "store";
+  }
+
+  exports['default'] = initializer;
+
+});
+define('scamp/initializers/simple-auth-torii', ['exports', 'simple-auth-torii/initializer'], function (exports, initializer) {
+
+	'use strict';
+
+	exports['default'] = initializer['default'];
+
+});
 define('scamp/initializers/simple-auth', ['exports', 'simple-auth/configuration', 'simple-auth/setup', 'scamp/config/environment'], function (exports, Configuration, setup, ENV) {
 
   'use strict';
 
   exports['default'] = {
     name: "simple-auth",
-    initialize: function (container, application) {
+    initialize: function initialize(container, application) {
       Configuration['default'].load(container, ENV['default']["simple-auth"] || {});
       setup['default'](container, application);
     }
@@ -461,35 +543,36 @@ define('scamp/router', ['exports', 'ember', 'scamp/config/environment'], functio
     this.route("settings");
     this.route("resources");
     this.route("logs");
+    this.route("login");
   });
 
   exports['default'] = Router;
 
 });
-define('scamp/routes/application', ['exports', 'ember'], function (exports, Ember) {
+define('scamp/routes/application', ['exports', 'ember', 'simple-auth/mixins/application-route-mixin'], function (exports, Ember, ApplicationRouteMixin) {
 
     'use strict';
 
-    exports['default'] = Ember['default'].Route.extend({
-        beforeModel: function () {
-            this.transitionTo("dashboard");
+    exports['default'] = Ember['default'].Route.extend(ApplicationRouteMixin['default'], {
+        beforeModel: function beforeModel() {
+            this.transitionTo("login");
         }
     });
 
 });
-define('scamp/routes/dashboard', ['exports', 'ember'], function (exports, Ember) {
+define('scamp/routes/dashboard', ['exports', 'ember', 'simple-auth/mixins/authenticated-route-mixin'], function (exports, Ember, AuthenticatedRouteMixin) {
 
     'use strict';
 
-    exports['default'] = Ember['default'].Route.extend({
-        model: function () {
+    exports['default'] = Ember['default'].Route.extend(AuthenticatedRouteMixin['default'], {
+        model: function model() {
             return Ember['default'].Object.create({
                 resources: this.store.find("resource"),
                 groups: this.store.find("group")
             });
         },
 
-        setupController: function (controller, model) {
+        setupController: function setupController(controller, model) {
             this._super(controller, model);
 
             controller.set("resources", model.get("resources"));
@@ -497,6 +580,21 @@ define('scamp/routes/dashboard', ['exports', 'ember'], function (exports, Ember)
 
             // Set various general info things
             controller.set("averageUtilization", 87);
+        }
+    });
+
+});
+define('scamp/routes/login', ['exports', 'ember'], function (exports, Ember) {
+
+    'use strict';
+
+    exports['default'] = Ember['default'].Route.extend({
+        actions: {
+            azureLogin: function azureLogin() {
+                console.log(this.get("session"));
+                this.get("session").authenticate("simple-auth-authenticator:torii", "azure-oauth2");
+                return;
+            }
         }
     });
 
@@ -513,14 +611,14 @@ define('scamp/routes/resources', ['exports', 'ember'], function (exports, Ember)
     'use strict';
 
     exports['default'] = Ember['default'].Route.extend({
-        model: function () {
+        model: function model() {
             return Ember['default'].Object.create({
                 resources: this.store.find("resource"),
                 groups: this.store.find("group")
             });
         },
 
-        setupController: function (controller, model) {
+        setupController: function setupController(controller, model) {
             this._super(controller, model);
 
             controller.set("resources", model.get("resources"));
@@ -2200,6 +2298,64 @@ define('scamp/templates/dashboard', ['exports'], function (exports) {
   }()));
 
 });
+define('scamp/templates/login', ['exports'], function (exports) {
+
+  'use strict';
+
+  exports['default'] = Ember.HTMLBars.template((function() {
+    return {
+      isHTMLBars: true,
+      blockParams: 0,
+      cachedFragment: null,
+      hasRendered: false,
+      build: function build(dom) {
+        var el0 = dom.createElement("div");
+        dom.setAttribute(el0,"class","row");
+        var el1 = dom.createTextNode("\n    ");
+        dom.appendChild(el0, el1);
+        var el1 = dom.createElement("div");
+        dom.setAttribute(el1,"class","col-lg-8");
+        var el2 = dom.createTextNode("\n        ");
+        dom.appendChild(el1, el2);
+        var el2 = dom.createElement("button");
+        var el3 = dom.createTextNode("Login with Azure");
+        dom.appendChild(el2, el3);
+        dom.appendChild(el1, el2);
+        var el2 = dom.createTextNode("\n    ");
+        dom.appendChild(el1, el2);
+        dom.appendChild(el0, el1);
+        var el1 = dom.createTextNode("\n");
+        dom.appendChild(el0, el1);
+        return el0;
+      },
+      render: function render(context, env, contextualElement) {
+        var dom = env.dom;
+        var hooks = env.hooks, element = hooks.element;
+        dom.detectNamespace(contextualElement);
+        var fragment;
+        if (env.useFragmentCache && dom.canClone) {
+          if (this.cachedFragment === null) {
+            fragment = this.build(dom);
+            if (this.hasRendered) {
+              this.cachedFragment = fragment;
+            } else {
+              this.hasRendered = true;
+            }
+          }
+          if (this.cachedFragment) {
+            fragment = dom.cloneNode(this.cachedFragment, true);
+          }
+        } else {
+          fragment = this.build(dom);
+        }
+        var element0 = dom.childAt(fragment, [1, 1]);
+        element(env, element0, context, "action", ["azureLogin"], {});
+        return fragment;
+      }
+    };
+  }()));
+
+});
 define('scamp/templates/logs', ['exports'], function (exports) {
 
   'use strict';
@@ -2520,6 +2676,16 @@ define('scamp/tests/controllers/dashboard.jshint', function () {
   });
 
 });
+define('scamp/tests/controllers/login.jshint', function () {
+
+  'use strict';
+
+  module('JSHint - controllers');
+  test('controllers/login.js should pass jshint', function() { 
+    ok(true, 'controllers/login.js should pass jshint.'); 
+  });
+
+});
 define('scamp/tests/controllers/logs.jshint', function () {
 
   'use strict';
@@ -2667,6 +2833,16 @@ define('scamp/tests/routes/dashboard.jshint', function () {
   });
 
 });
+define('scamp/tests/routes/login.jshint', function () {
+
+  'use strict';
+
+  module('JSHint - routes');
+  test('routes/login.js should pass jshint', function() { 
+    ok(true, 'routes/login.js should pass jshint.'); 
+  });
+
+});
 define('scamp/tests/routes/logs.jshint', function () {
 
   'use strict';
@@ -2786,6 +2962,31 @@ define('scamp/tests/unit/controllers/dashboard-test.jshint', function () {
   module('JSHint - unit/controllers');
   test('unit/controllers/dashboard-test.js should pass jshint', function() { 
     ok(true, 'unit/controllers/dashboard-test.js should pass jshint.'); 
+  });
+
+});
+define('scamp/tests/unit/controllers/login-test', ['ember-qunit'], function (ember_qunit) {
+
+  'use strict';
+
+  ember_qunit.moduleFor("controller:login", {});
+
+  // Replace this with your real tests.
+  ember_qunit.test("it exists", function (assert) {
+    var controller = this.subject();
+    assert.ok(controller);
+  });
+  // Specify the other units that are required for this test.
+  // needs: ['controller:foo']
+
+});
+define('scamp/tests/unit/controllers/login-test.jshint', function () {
+
+  'use strict';
+
+  module('JSHint - unit/controllers');
+  test('unit/controllers/login-test.js should pass jshint', function() { 
+    ok(true, 'unit/controllers/login-test.js should pass jshint.'); 
   });
 
 });
@@ -2989,6 +3190,30 @@ define('scamp/tests/unit/routes/dashboard-test.jshint', function () {
   });
 
 });
+define('scamp/tests/unit/routes/login-test', ['ember-qunit'], function (ember_qunit) {
+
+  'use strict';
+
+  ember_qunit.moduleFor("route:login", {});
+
+  ember_qunit.test("it exists", function (assert) {
+    var route = this.subject();
+    assert.ok(route);
+  });
+  // Specify the other units that are required for this test.
+  // needs: ['controller:foo']
+
+});
+define('scamp/tests/unit/routes/login-test.jshint', function () {
+
+  'use strict';
+
+  module('JSHint - unit/routes');
+  test('unit/routes/login-test.js should pass jshint', function() { 
+    ok(true, 'unit/routes/login-test.js should pass jshint.'); 
+  });
+
+});
 define('scamp/tests/unit/routes/logs-test', ['ember-qunit'], function (ember_qunit) {
 
   'use strict';
@@ -3127,6 +3352,33 @@ define('scamp/tests/views/dashboard.jshint', function () {
   });
 
 });
+define('scamp/torii-providers/azure-oauth2', ['exports', 'torii/providers/oauth2-code', 'torii/configuration'], function (exports, Oauth2, configuration) {
+
+  'use strict';
+
+  var AzureOauth2 = Oauth2['default'].extend({
+    name: "azure-oauth2",
+    baseUrl: "https://login.windows.net/common/oauth2/authorize",
+
+    // additional url params that this provider requires
+    requiredUrlParams: ["state"],
+
+    responseParams: ["code", "session_state", "state"],
+
+    state: "STATE",
+
+    response_type: "code",
+
+    redirectUri: configuration.configurable("redirectUri", function () {
+      // A hack that allows redirectUri to be configurable
+      // but default to the superclass
+      return this._super();
+    })
+  });
+
+  exports['default'] = AzureOauth2;
+
+});
 define('scamp/views/application', ['exports', 'ember'], function (exports, Ember) {
 
     'use strict';
@@ -3137,27 +3389,27 @@ define('scamp/views/application', ['exports', 'ember'], function (exports, Ember
         userDropdownOpen: false,
         notificationsDropdownOpen: false,
 
-        init: function () {
+        init: function init() {
             this._super();
             Ember['default'].$(window).on("resize", Ember['default'].run.bind(this, this.handleResize));
         },
 
-        handleResize: function () {
+        handleResize: function handleResize() {
             var mq = window.matchMedia("only screen and (max-width: 560px)");
             console.log(mq);
             this.set("sidebarOpen", !mq.matches);
         },
 
         actions: {
-            toggleSidebar: function () {
+            toggleSidebar: function toggleSidebar() {
                 this.toggleProperty("sidebarOpen");
             },
 
-            toggleUserDropdown: function () {
+            toggleUserDropdown: function toggleUserDropdown() {
                 this.toggleProperty("userDropdownOpen");
             },
 
-            toggleNotificationsDropdown: function () {
+            toggleNotificationsDropdown: function toggleNotificationsDropdown() {
                 this.toggleProperty("notificationsDropdownOpen");
             }
         }
@@ -3203,6 +3455,10 @@ define('scamp/views/dashboard', ['exports', 'ember'], function (exports, Ember) 
 });
 /* jshint ignore:start */
 
+/* jshint ignore:end */
+
+/* jshint ignore:start */
+
 define('scamp/config/environment', ['ember'], function(Ember) {
   var prefix = 'scamp';
 /* jshint ignore:start */
@@ -3225,7 +3481,7 @@ catch(err) {
 if (runningTests) {
   require("scamp/tests/test-helper");
 } else {
-  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.bd1be2ba"});
+  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.fc895081"});
 }
 
 /* jshint ignore:end */
