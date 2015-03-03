@@ -3481,7 +3481,7 @@ catch(err) {
 if (runningTests) {
   require("scamp/tests/test-helper");
 } else {
-  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.fc895081"});
+  require("scamp/app")["default"].create({"name":"scamp","version":"0.1.0.f3b5a29c"});
 }
 
 /* jshint ignore:end */
