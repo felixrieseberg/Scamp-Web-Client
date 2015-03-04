@@ -10,6 +10,7 @@ Router.map(function() {
   this.route("settings");
   this.route("resources");
   this.route("logs");
+  this.route('login');
 });
 
 export default Router;

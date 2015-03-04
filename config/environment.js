@@ -5,7 +5,7 @@ module.exports = function (environment) {
     modulePrefix: 'scamp',
     environment: environment,
     baseURL: '/',
-    locationType: 'auto',
+    locationType: 'hash',
     EmberENV: {
       FEATURES: {
         // Here you can enable experimental features on an ember canary build
@@ -53,7 +53,15 @@ module.exports = function (environment) {
 
   }
 
-
+  ENV['torii'] = {
+    providers: {
+      'azure-oauth2': {
+        apiKey: '603b6934-f721-47ae-9037-7b1027ef6389',
+        redirect_uri: "https://scamp.azurewebsites.net",
+        state: "88e491b5-5009-4fa9-8d66-9d61bdb2007e" // For CSRF, should be random & unguessable
+      }
+    }
+  }
 
   return ENV;
 };
