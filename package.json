@@ -44,8 +44,8 @@
     "express": "^4.8.5",
     "glob": "^4.0.5",
     "grunt": "^0.4.5",
-    "grunt-contrib-jscs": "^0.1.8",
     "grunt-contrib-jshint": "^0.10.0",
+    "grunt-jscodesniffer": "^0.1.10",
     "grunt-jscs": "^0.8.1",
     "load-grunt-tasks": "^1.0.0",
     "torii": "^0.2.2"
